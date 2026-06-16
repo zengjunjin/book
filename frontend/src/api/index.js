@@ -68,4 +68,19 @@ export const recommendAPI = {
   compareAlgorithms: () => api.get('/recommend/compare')
 }
 
+// ============ AI 助手相关 ============
+export const aiAPI = {
+  // 获取引擎状态（Ollama 是否在线、图书馆数据等）
+  getStatus: () => api.get('/ai/status'),
+
+  // 发起对话（非流式）
+  chat: (message) => api.post('/ai/chat', { message }),
+
+  // 获取热门书籍（供 AI 助手首页展示）
+  getPopular: (limit = 10) => api.get('/ai/popular', { params: { limit } }),
+
+  // 语义搜索（供 AI 或搜索页使用）
+  search: (q, limit = 15) => api.get('/ai/search', { params: { q, limit } })
+}
+
 export default api

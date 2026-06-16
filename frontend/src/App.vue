@@ -1,6 +1,23 @@
 <template>
   <div class="app" :class="{ 'dark-mode': isDarkMode }">
-    <template v-if="!isAuthPage">
+    <!-- AI 助手页：全屏独立，无侧边栏 -->
+    <template v-if="isAIPage">
+      <router-view v-slot="{ Component }">
+        <transition name="page" mode="out-in">
+          <component :is="Component" />
+        </transition>
+      </router-view>
+    </template>
+    <!-- 登录注册页：全屏独立 -->
+    <template v-else-if="isAuthPage">
+      <router-view v-slot="{ Component }">
+        <transition name="page" mode="out-in">
+          <component :is="Component" />
+        </transition>
+      </router-view>
+    </template>
+    <!-- 普通页：侧边栏 + 主内容 -->
+    <template v-else>
       <el-container>
         <AppSidebar />
         <el-main>
@@ -11,13 +28,6 @@
           </router-view>
         </el-main>
       </el-container>
-    </template>
-    <template v-else>
-      <router-view v-slot="{ Component }">
-        <transition name="page" mode="out-in">
-          <component :is="Component" />
-        </transition>
-      </router-view>
     </template>
   </div>
 </template>
@@ -30,6 +40,9 @@ import AppSidebar from './components/AppSidebar.vue'
 const route = useRoute()
 const isAuthPage = computed(() => {
   return route.path === '/login' || route.path === '/register'
+})
+const isAIPage = computed(() => {
+  return route.path === '/ai' || route.path.startsWith('/ai')
 })
 
 // 暗色模式切换
@@ -48,7 +61,7 @@ watch(isDarkMode, (newVal) => {
 </script>
 
 <style>
-/* ========== 全局样式 - 极简科技风 ========== */
+/* ========== 全局样式 - 深色极客美学 ========== */
 * {
   margin: 0;
   padding: 0;
@@ -57,22 +70,26 @@ watch(isDarkMode, (newVal) => {
 
 :root {
   /* 极简配色系统 */
-  --bg-primary: #0f0f14;
-  --bg-card: #18181f;
-  --border-color: #2a2a35;
-  --border-hover: #f97316;
-  --text-primary: #e4e4e7;
-  --text-secondary: #71717a;
-  --text-muted: #52525b;
-  --accent: #f97316;
-  --accent-hover: #fb923c;
-  --success: #10b981;
-  --warning: #f59e0b;
-  --danger: #ef4444;
+  --bg-primary: #09090e;
+  --bg-secondary: #0f0f17;
+  --bg-card: rgba(255, 255, 255, 0.04);
+  --border-color: rgba(255, 255, 255, 0.07);
+  --border-hover: rgba(255, 255, 255, 0.12);
+  --text-primary: #e2e8f0;
+  --text-secondary: #64748b;
+  --text-muted: #475569;
+  --accent: #6366f1;
+  --accent-light: #818cf8;
+  --accent-glow: rgba(99, 102, 241, 0.3);
+  --accent-cyan: #22d3ee;
+  --success: #34d399;
+  --warning: #fbbf24;
+  --danger: #f87171;
+  --easing-smooth: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 body {
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   background-color: var(--bg-primary);
   color: var(--text-primary);
   font-size: 15px;
@@ -88,7 +105,7 @@ body {
 /* 页面切换过渡动画 */
 .page-enter-active,
 .page-leave-active {
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all 0.4s var(--easing-smooth);
 }
 
 .page-enter-from {
@@ -102,7 +119,7 @@ body {
 }
 
 .el-main {
-  padding: 48px;
+  padding: 0;
   background-color: var(--bg-primary);
   min-height: 100vh;
   color: var(--text-primary);
@@ -110,43 +127,45 @@ body {
 
 /* ========== Element Plus 主题覆盖 ========== */
 :root {
-  --el-color-primary: #f97316;
-  --el-color-primary-light-3: #fb923c;
-  --el-color-primary-light-5: #fdba74;
-  --el-color-primary-light-7: #fed7aa;
-  --el-color-primary-light-8: #ffedd5;
-  --el-color-primary-light-9: #fff7ed;
-  --el-color-primary-dark-2: #c2410c;
-  --el-bg-color: var(--bg-card);
+  --el-color-primary: #6366f1;
+  --el-color-primary-light-3: #818cf8;
+  --el-color-primary-light-5: #a5b4fc;
+  --el-color-primary-light-7: #c7d2fe;
+  --el-color-primary-light-8: #e0e7ff;
+  --el-color-primary-light-9: #eef2ff;
+  --el-color-primary-dark-2: #4f46e5;
+  --el-bg-color: var(--bg-secondary);
   --el-bg-color-overlay: var(--bg-card);
   --el-text-color-primary: var(--text-primary);
   --el-text-color-regular: var(--text-secondary);
   --el-text-color-secondary: var(--text-muted);
   --el-text-color-placeholder: var(--text-muted);
   --el-border-color: var(--border-color);
-  --el-border-color-light: #22222b;
+  --el-border-color-light: rgba(255, 255, 255, 0.05);
   --el-fill-color: var(--bg-card);
-  --el-fill-color-light: #1f1f28;
+  --el-fill-color-light: rgba(255, 255, 255, 0.03);
   --el-fill-color-blank: var(--bg-primary);
   --el-color-success: var(--success);
   --el-color-warning: var(--warning);
   --el-color-danger: var(--danger);
   --el-color-info: var(--text-muted);
-  --el-border-radius-base: 8px;
-  --el-border-radius-small: 6px;
+  --el-border-radius-base: 10px;
+  --el-border-radius-small: 8px;
 }
 
-/* 卡片 - 扁平化设计 */
+/* 卡片 */
 .el-card {
   background-color: var(--bg-card) !important;
   border: 1px solid var(--border-color) !important;
-  border-radius: 10px !important;
+  border-radius: 12px !important;
   color: var(--text-primary);
-  transition: border-color 0.2s ease, transform 0.2s ease;
+  transition: border-color 0.25s var(--easing-smooth), transform 0.25s var(--easing-smooth), box-shadow 0.25s var(--easing-smooth);
 }
 
 .el-card:hover {
-  border-color: var(--border-hover) !important;
+  border-color: var(--accent-light) !important;
+  transform: scale(1.01);
+  box-shadow: 0 4px 20px rgba(99, 102, 241, 0.1);
 }
 
 .el-card__header {
@@ -162,10 +181,10 @@ body {
 
 /* 输入框 */
 .el-input__wrapper {
-  background-color: var(--bg-primary) !important;
+  background-color: var(--bg-secondary) !important;
   box-shadow: 0 0 0 1px var(--border-color) inset !important;
-  border-radius: 8px;
-  transition: border-color 0.2s ease;
+  border-radius: 10px;
+  transition: border-color 0.25s var(--easing-smooth), box-shadow 0.25s var(--easing-smooth);
 }
 
 .el-input__wrapper:hover,
@@ -192,34 +211,35 @@ body {
   border-color: var(--accent) !important;
   color: #fff !important;
   font-weight: 500;
-  border-radius: 8px;
-  transition: all 0.2s ease;
+  border-radius: 10px;
+  transition: all 0.25s var(--easing-smooth);
 }
 
 .el-button--primary:hover {
-  background-color: var(--accent-hover) !important;
-  border-color: var(--accent-hover) !important;
+  background-color: var(--accent-light) !important;
+  border-color: var(--accent-light) !important;
   transform: scale(1.02);
+  box-shadow: 0 4px 16px var(--accent-glow);
 }
 
 .el-button {
   background-color: transparent !important;
   border: 1px solid var(--border-color) !important;
   color: var(--text-primary) !important;
-  border-radius: 8px;
-  transition: all 0.2s ease;
+  border-radius: 10px;
+  transition: all 0.25s var(--easing-smooth);
 }
 
 .el-button:hover {
-  border-color: var(--accent) !important;
-  color: var(--accent) !important;
+  border-color: var(--accent-light) !important;
+  color: var(--accent-light) !important;
   transform: scale(1.02);
 }
 
 /* 表格 */
 .el-table {
   background-color: var(--bg-card) !important;
-  border-radius: 10px;
+  border-radius: 12px;
   overflow: hidden;
 }
 
@@ -228,7 +248,7 @@ body {
 }
 
 .el-table th.el-table__cell {
-  background-color: #1f1f28 !important;
+  background-color: rgba(255, 255, 255, 0.03) !important;
   color: var(--text-primary) !important;
   font-weight: 600;
   border-bottom-color: var(--border-color) !important;
@@ -252,14 +272,14 @@ body {
   background-color: var(--bg-card) !important;
   color: var(--text-secondary) !important;
   border: 1px solid var(--border-color) !important;
-  border-radius: 6px;
+  border-radius: 8px;
   margin: 0 4px;
-  transition: all 0.2s ease;
+  transition: all 0.25s var(--easing-smooth);
 }
 
 .el-pagination .el-pager li:not(.is-active):hover {
-  color: var(--accent) !important;
-  border-color: var(--accent) !important;
+  color: var(--accent-light) !important;
+  border-color: var(--accent-light) !important;
 }
 
 .el-pagination .el-pager li.is-active {
@@ -272,7 +292,7 @@ body {
   background-color: var(--bg-card) !important;
   color: var(--text-secondary) !important;
   border: 1px solid var(--border-color) !important;
-  border-radius: 6px;
+  border-radius: 8px;
 }
 
 .el-pagination button:disabled {
@@ -290,7 +310,7 @@ body {
   color: var(--text-muted) !important;
   font-size: 15px;
   font-weight: 500;
-  transition: color 0.2s ease;
+  transition: color 0.25s var(--easing-smooth);
 }
 
 .el-tabs__item:hover {
@@ -298,7 +318,7 @@ body {
 }
 
 .el-tabs__item.is-active {
-  color: var(--accent) !important;
+  color: var(--accent-light) !important;
 }
 
 .el-tabs__active-bar {
@@ -314,7 +334,7 @@ body {
 .el-message {
   background-color: var(--bg-card) !important;
   border: 1px solid var(--border-color) !important;
-  border-radius: 10px;
+  border-radius: 12px;
 }
 
 .el-message .el-message__content {
@@ -335,11 +355,11 @@ body {
 
 /* 加载中 */
 .el-loading-mask {
-  background-color: rgba(15, 15, 20, 0.9) !important;
+  background-color: rgba(9, 9, 14, 0.9) !important;
 }
 
 .el-loading-text {
-  color: var(--accent) !important;
+  color: var(--accent-light) !important;
 }
 
 .el-loading-spinner .circular {
@@ -353,7 +373,7 @@ body {
 }
 
 .el-rate .el-rate__icon.is-active {
-  color: var(--accent) !important;
+  color: var(--accent-cyan) !important;
 }
 
 /* 空状态 */
@@ -369,16 +389,16 @@ body {
 .el-tag {
   background-color: var(--bg-card) !important;
   border: 1px solid var(--border-color) !important;
-  color: var(--accent) !important;
-  border-radius: 6px;
+  color: var(--accent-light) !important;
+  border-radius: 8px;
   font-size: 12px;
 }
 
 /* 对话框 */
 .el-dialog {
-  background-color: var(--bg-card) !important;
+  background-color: var(--bg-secondary) !important;
   border: 1px solid var(--border-color) !important;
-  border-radius: 12px;
+  border-radius: 14px;
 }
 
 .el-dialog__header {
@@ -398,24 +418,23 @@ body {
 
 /* ========== 滚动条美化 ========== */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
 
 ::-webkit-scrollbar-track {
   background: var(--bg-primary);
-  border-radius: 4px;
+  border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb {
   background: var(--border-color);
-  border-radius: 4px;
+  border-radius: 3px;
   transition: all 0.2s ease;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--accent);
-  box-shadow: 0 0 8px rgba(249, 115, 22, 0.3);
+  background: var(--accent-light);
 }
 
 ::-webkit-scrollbar-corner {
@@ -432,6 +451,7 @@ body {
   margin: 0 0 8px 0;
   font-size: 28px;
   font-weight: 700;
+  font-family: 'Space Grotesk', sans-serif;
 }
 
 .page-header .subtitle {
@@ -443,19 +463,19 @@ body {
 /* ========== 响应式布局 ========== */
 @media (max-width: 1024px) {
   .el-main {
-    padding: 32px;
+    padding: 0;
   }
 }
 
 @media (max-width: 768px) {
   .el-main {
-    padding: 20px;
+    padding: 0;
   }
 }
 
 @media (max-width: 480px) {
   .el-main {
-    padding: 12px;
+    padding: 0;
   }
 }
 </style>

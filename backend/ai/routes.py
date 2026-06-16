@@ -1,1400 +1,936 @@
-"""
-AI 内容创作助手 - API 路由 (Blueprint)
+"""AI 书籍助手 - 核心路由 & RAG 引擎
+
+路由结构（由 Flask app 在 /api/ai 下挂载 Blueprint）：
+  GET  /status                引擎状态（Ollama / FAISS / 图书馆统计）
+  POST /chat                  对话主入口（RAG）
+  POST /chat/stream           流式对话（SSE）
+  GET  /search?q=...&limit=5  语义搜索
+  POST /ask/<book_id>         针对某本书的问答
+  GET  /recommend/<user_id>   为指定用户生成推荐
+  GET  /health                健康检查
+
+响应 JSON 契约（给前端的）：
+  {
+    "success": true,
+    "intent": "detail|recommend|similar|search|greeting|thanks|unknown",
+    "reply": "自然语言回复字符串",
+    "books": [              // 推荐 / 详情 / 搜索时返回的书籍卡片列表
+      {
+        "book_id": 5001,
+        "title": "Classical Mythology",
+        "author": "Mark P. O. Morford",
+        "category": "Fiction",
+        "year": 2000,
+        "publisher": "...",
+        "image_url": "...",
+        "avg_rating": 8.5,      // 0~10
+        "rating_count": 123,
+        "similarity": 0.92,     // 语义匹配度，仅推荐/搜索返回
+        "match_reason": "书名包含关键词"   // 给前端展示的提示
+      },
+      ...
+    ],
+    "retrieved_count": 15,   // 语义检索命中数
+    "elapsed_ms": 340
+  }
 """
 
+import os
+import re
+import sys
 import time
-import hashlib
 import json
-import logging
 import random
-from flask import Blueprint, request, jsonify, current_app, Response
-from flask_limiter.util import get_remote_address
+import logging
+from typing import List, Dict, Optional, Tuple
 
-# 创建 AI blueprint
-ai_bp = Blueprint('ai', __name__)
+from flask import Blueprint, request, jsonify, Response
+
+# --- 模块初始化：让本模块也能直接 python ai/routes.py 跑 ---
+_CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+_BACKEND_ROOT = os.path.dirname(_CURRENT_DIR)
+if _BACKEND_ROOT not in sys.path:
+    sys.path.insert(0, _BACKEND_ROOT)
 
 logger = logging.getLogger(__name__)
 
-# ========== AI缓存工具 ==========
-# AI响应缓存TTL配置（秒）
-_AI_TTL = {
-    'review': 3600,      # 书评：1小时
-    'summary': 3600,     # 摘要：1小时
-    'analyze': 3600,     # 分析：1小时
-    'knowledge': 7200,   # 知识图谱：2小时（较稳定）
-    'search': 600,       # 搜索：10分钟（较动态）
-    'report': 1800,      # 阅读报告：30分钟
-    'recommend': 1800,   # 推荐理由：30分钟
-}
+# ============ 配置 ============
+_OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
+_OLLAMA_CHAT_MODEL = os.environ.get("OLLAMA_MODEL", "qwen2.5:1.5b")
+_OLLAMA_TIMEOUT = int(os.environ.get("OLLAMA_TIMEOUT", "60"))
+
+SEARCH_TOP_K = 15            # 语义搜索候选数
+RECOMMEND_TOP_K = 6          # 展示给用户的推荐数
+SIMILARITY_THRESHOLD = 0.3   # 相似度低于该值的结果将不展示（只影响 FAISS 分支）
 
 
-def _ai_cache_key(prefix, *args):
-    """生成可复现的缓存键
-    格式: ai:review:5001:personal
-    """
-    key = f"ai:{prefix}:" + ":".join(str(a) for a in args)
-    # 过长时做hash保护
-    if len(key) > 200:
-        key = key[:150] + ':' + hashlib.md5(key.encode()).hexdigest()
-    return key
+# ============ 蓝图 ============
+# 注意：app.register_blueprint(ai_bp, url_prefix='/api/ai')
+# 因此这里的 route('/chat') 实际暴露为 /api/ai/chat
+ai_bp = Blueprint("ai_bp", __name__)
 
 
-def _try_get_cache(key):
-    """从缓存读取"""
-    try:
-        from services.cache import cache_service
-        return cache_service.get(key)
-    except Exception:
-        return None
+# ============ 工具：数据库 & 模型 ============
+def _get_db():
+    from extensions import db
+    return db
 
 
-def _try_set_cache(key, value, ttl=3600):
-    """写入缓存"""
-    try:
-        from services.cache import cache_service
-        cache_service.set(key, value, ttl=ttl)
-    except Exception:
-        pass
+def _get_book_model():
+    from models import Book
+    return Book
 
 
-def _with_cache(prefix, key_args, data_func, ttl=None):
-    """统一的缓存辅助函数
-    返回: (result_dict, cache_hit_bool)
-    """
-    if ttl is None:
-        ttl = _AI_TTL.get(prefix, 3600)
-    
-    # 支持 refresh=true 强制刷新
-    refresh = request.args.get('refresh', '').lower() == 'true' or \
-              (request.is_json and (request.get_json() or {}).get('refresh', False))
-    
-    cache_key = _ai_cache_key(prefix, *key_args)
-    
-    if not refresh:
-        cached = _try_get_cache(cache_key)
-        if cached is not None:
-            return cached, True
-    
-    # 未命中，执行实际生成
-    result = data_func()
-    
-    # 成功才缓存
-    if result and isinstance(result, dict) and result.get('success', False):
-        _try_set_cache(cache_key, result, ttl=ttl)
-    
-    return result, False
+def _get_rating_model():
+    from models import Rating
+    return Rating
 
 
-def _ai_response(data, cache_hit=False):
-    """包装AI响应，加入X-Cache头信息"""
-    resp = jsonify(data)
-    resp.headers['X-Cache'] = 'HIT' if cache_hit else 'MISS'
-    return resp
+def _row_to_book_card(row, avg_rating=None, rating_count=None,
+                      similarity=None, match_reason=None):
+    """把 SQLAlchemy Book row / dict 统一转换成前端可消费的卡片结构。"""
+    book_id = int(getattr(row, "id", 0) or 0)
+    title = getattr(row, "title", "") or ""
+    author = getattr(row, "author", "") or ""
+    category = getattr(row, "category", "") or "未分类"
+    year = getattr(row, "year", None) or 0
+    publisher = getattr(row, "publisher", "") or ""
+    image_url = getattr(row, "image_url", "") or ""
 
-
-# ========== 状态检查 ==========
-@ai_bp.route('/status', methods=['GET'])
-def ai_status():
-    """获取 AI 引擎运行状态 + FAISS 索引状态"""
-    try:
-        from .llm_engine import get_llm_engine
-        from services.embedding_service import get_embedding_service
-        llm_status = get_llm_engine().get_status()
-        svc = get_embedding_service()
-        faiss_info = {
-            'model_loaded': svc.model is not None,
-            'faiss_ready': svc.faiss_ready,
-            'faiss_index_size': svc.index_size,
-            'embedding_cache_size': len(svc.book_embeddings),
-        }
-        return {'success': True, 'llm': llm_status, 'faiss': faiss_info}
-    except Exception as e:
-        return {'success': False, 'error': str(e)}, 500
-
-
-# ========== AI 对话流式生成（SSE） ==========
-@ai_bp.route('/chat/stream', methods=['POST'])
-def ai_chat_stream():
-    """流式 AI 对话 - Server-Sent Events
-    POST JSON: {prompt, user_id, model}
-    返回: text/event-stream
-      data: [START]
-      data: <chunk>
-      ...
-      data: [DONE]
-    """
-    data = request.get_json() or {}
-    prompt = (data.get('prompt') or data.get('message') or '').strip()
-    user_id = data.get('user_id')
-    model = data.get('model')
-
-    def _emit(event_data: str) -> bytes:
-        return f'data: {event_data}\n\n'.encode('utf-8')
-
-    def _generate():
-        # 1) 首事件 [START]
+    # 如果评分没传进来，尝试查一下
+    if avg_rating is None or rating_count is None:
         try:
-            yield _emit('[START]')
-        except Exception:
-            return
-
-        if not prompt:
-            yield _emit('[ERROR] prompt 不能为空')
-            return
-
-        # 2) 逐步生成响应内容
-        try:
-            from .llm_engine import get_llm_engine
-            engine = get_llm_engine()
-
-            # 尝试使用 LLM 引擎的流式接口
-            engine_ok = False
-            try:
-                if engine and hasattr(engine, 'ollama_available') and engine.ollama_available and hasattr(engine, 'generate_stream'):
-                    engine_ok = True
-            except Exception:
-                engine_ok = False
-
-            collected_chunks = []
-
-            if engine_ok:
-                try:
-                    def _on_token(token: str):
-                        collected_chunks.append(token)
-
-                    llm_resp = engine.generate_stream(prompt, model=model, callback=_on_token)
-                    full_text = getattr(llm_resp, 'content', '') or ''.join(collected_chunks)
-
-                    if not full_text and collected_chunks:
-                        full_text = ''.join(collected_chunks)
-
-                    # 按每 3-8 个字符切块，模拟流式逐步输出
-                    chunk_size = random.randint(3, 8)
-                    pos = 0
-                    while pos < len(full_text):
-                        piece = full_text[pos:pos + chunk_size]
-                        yield _emit(piece)
-                        pos += chunk_size
-                        chunk_size = random.randint(3, 8)
-                        time.sleep(0.02)
-
-                except Exception as e:
-                    yield _emit(f'[ERROR] LLM 流式调用失败: {e}')
-                    return
-            else:
-                # 降级到普通 generate 再切片流式输出
-                try:
-                    llm_resp = engine.generate(prompt, model=model) if engine else None
-                    full_text = getattr(llm_resp, 'content', '') if llm_resp else ''
-                    if not full_text:
-                        # 再次降级：本地规则回复
-                        full_text = (
-                            f"你好！我收到了你的问题：「{prompt[:80]}」。\n"
-                            f"作为书籍 AI 助手，我可以帮你：\n"
-                            f"• 生成个性化书评\n"
-                            f"• 推荐匹配的书籍\n"
-                            f"• 分析书籍内容与主题\n"
-                            f"• 生成你的阅读报告\n"
-                            f"\n你可以进一步告诉我，你希望从哪个角度入手？"
-                        )
-                    chunk_size = random.randint(3, 8)
-                    pos = 0
-                    while pos < len(full_text):
-                        piece = full_text[pos:pos + chunk_size]
-                        yield _emit(piece)
-                        pos += chunk_size
-                        chunk_size = random.randint(3, 8)
-                        time.sleep(0.02)
-                except Exception as e:
-                    yield _emit(f'[ERROR] LLM 调用失败: {e}')
-                    return
-        except Exception as e:
-            yield _emit(f'[ERROR] 生成失败: {e}')
-            return
-
-        # 3) 结束事件 [DONE]
-        yield _emit('[DONE]')
-
-    try:
-        return Response(_generate(), mimetype='text/event-stream')
-    except Exception as e:
-        return Response(f'data: [ERROR] 初始化失败: {e}\n\n', mimetype='text/event-stream')
-
-
-# ========== 对话功能 ==========
-@ai_bp.route('/chat', methods=['POST'])
-def ai_chat():
-    """处理用户消息并返回 AI 响应"""
-    data = request.get_json() or {}
-    message = data.get('message', '').strip()
-    conv_id = data.get('conversation_id') or f'conv_{int(time.time() * 1000)}'
-    user_id = data.get('user_id')
-
-    if not message:
-        return {'success': False, 'error': '消息不能为空'}, 400
-
-    try:
-        from .conversation import get_conversation_manager
-        conv_manager = get_conversation_manager()
-        result = conv_manager.handle_message(conv_id, message, user_id)
-        return {'success': True, **result}
-    except Exception as e:
-        return {'success': False, 'error': f'对话处理失败: {str(e)}'}, 500
-
-
-# ========== 书评生成 ==========
-@ai_bp.route('/review/<int:book_id>', methods=['GET', 'POST'])
-def ai_review(book_id):
-    """为指定书籍生成个性化书评（带缓存）"""
-    data = request.get_json() or {}
-    style = data.get('style', 'personal')
-    # GET请求也支持 style 参数
-    if request.method == 'GET':
-        style = request.args.get('style', style)
-
-    def _gen():
-        try:
-            from .review_generator import get_review_generator
-            review_gen = get_review_generator()
-            review = review_gen.generate(book_id, style=style)
-            return {'success': True, 'review': review.to_dict()}
-        except Exception as e:
-            return {'success': False, 'error': f'书评生成失败: {str(e)}'}
-
-    result, cache_hit = _with_cache('review', [book_id, style], _gen)
-    status = 500 if not result.get('success', False) else 200
-    return _ai_response(result, cache_hit=cache_hit), status
-
-
-# ========== 知识图谱 ==========
-@ai_bp.route('/knowledge/<int:book_id>', methods=['GET', 'POST'])
-def ai_knowledge(book_id):
-    """生成书籍的知识图谱/思维导图（带缓存）"""
-    def _gen():
-        try:
-            from .knowledge_graph import get_knowledge_graph_generator
-            kg_gen = get_knowledge_graph_generator()
-            graph = kg_gen.generate(book_id)
-            mermaid = kg_gen.to_mermaid(graph)
-            return {'success': True, 'graph': graph.to_dict(), 'mermaid': mermaid}
-        except Exception as e:
-            return {'success': False, 'error': f'知识图谱生成失败: {str(e)}'}
-
-    result, cache_hit = _with_cache('knowledge', [book_id], _gen)
-    status = 500 if not result.get('success', False) else 200
-    return _ai_response(result, cache_hit=cache_hit), status
-
-
-# ========== 阅读报告 ==========
-@ai_bp.route('/report/<int:user_id>', methods=['GET', 'POST'])
-def ai_report(user_id):
-    """为用户生成个性化阅读报告（带缓存）"""
-    def _gen():
-        try:
-            from .report_generator import get_report_generator
-            report_gen = get_report_generator()
-            report = report_gen.generate_report(user_id, use_llm=True)
-            return {'success': True, 'report': report.to_dict()}
-        except Exception as e:
-            return {'success': False, 'error': f'阅读报告生成失败: {str(e)}'}
-
-    result, cache_hit = _with_cache('report', [user_id], _gen)
-    status = 500 if not result.get('success', False) else 200
-    return _ai_response(result, cache_hit=cache_hit), status
-
-
-# ========== 智能推荐理由 ==========
-@ai_bp.route('/recommend', methods=['POST'])
-def ai_recommend_route():
-    """生成个性化推荐理由（带缓存）"""
-    data = request.get_json() or {}
-    user_id = data.get('user_id', 8)
-
-    def _gen():
-        try:
-            from .llm_engine import get_llm_engine
-            engine = get_llm_engine()
-            prompt = f"请为用户{user_id}推荐3-5本适合的书籍，包含书名、推荐理由和匹配度评分。"
-            response = engine.generate(prompt)
-            return {'success': True, 'recommendation': response.to_dict()}
-        except Exception as e:
-            return {'success': False, 'error': f'推荐生成失败: {str(e)}'}
-
-    result, cache_hit = _with_cache('recommend', [user_id], _gen)
-    status = 500 if not result.get('success', False) else 200
-    return _ai_response(result, cache_hit=cache_hit), status
-
-
-# ========== 书籍摘要 ==========
-@ai_bp.route('/summary/<int:book_id>', methods=['GET', 'POST'])
-def ai_summary(book_id):
-    """为指定书籍生成智能摘要（带缓存）"""
-    def _gen():
-        try:
-            from .book_analyzer import get_book_analyzer
-            analyzer = get_book_analyzer()
-            summary = analyzer.generate_summary(book_id)
-            if summary:
-                return {'success': True, 'summary': summary.to_dict(), '_status': 200}
-            else:
-                return {'success': False, 'error': '未找到书籍', '_status': 404}
-        except Exception as e:
-            return {'success': False, 'error': f'摘要生成失败: {str(e)}', '_status': 500}
-
-    result, cache_hit = _with_cache('summary', [book_id], _gen)
-    status = result.pop('_status', 200) if result.get('success', False) else result.pop('_status', 500)
-    return _ai_response(result, cache_hit=cache_hit), status
-
-
-# ========== 书籍搜索 ==========
-@ai_bp.route('/search', methods=['GET'])
-def ai_search():
-    """搜索书籍（带缓存）"""
-    query = request.args.get('q', '').strip()
-    limit = int(request.args.get('limit', 10))
-    # 参数边界保护
-    if limit < 1:
-        limit = 5
-    if limit > 50:
-        limit = 50
-
-    if not query:
-        return {'success': False, 'error': '搜索词不能为空'}, 400
-
-    def _gen():
-        try:
-            from .book_analyzer import get_book_analyzer
-            analyzer = get_book_analyzer()
-            books = analyzer.search_books(query, limit)
-            return {'success': True, 'books': books, 'count': len(books)}
-        except Exception as e:
-            return {'success': False, 'error': f'搜索失败: {str(e)}'}
-
-    result, cache_hit = _with_cache('search', [query, limit], _gen)
-    status = 500 if not result.get('success', False) else 200
-    return _ai_response(result, cache_hit=cache_hit), status
-
-
-# ========== 书籍详情分析 ==========
-@ai_bp.route('/analyze/<int:book_id>', methods=['GET', 'POST'])
-def ai_analyze(book_id):
-    """完整分析一本书（画像 + 摘要 + 相似书籍）（带缓存）"""
-    data = request.get_json() or {}
-    use_llm = data.get('use_llm', True)
-    if request.method == 'GET':
-        use_llm = request.args.get('use_llm', 'true').lower() != 'false'
-
-    def _gen():
-        try:
-            from .book_analyzer import get_book_analyzer
-            analyzer = get_book_analyzer()
-            analysis = analyzer.analyze_book(book_id, use_llm=use_llm)
-            if 'error' in analysis:
-                return {'success': False, 'error': analysis['error'], '_status': 404}
-            return {'success': True, 'analysis': analysis, '_status': 200}
-        except Exception as e:
-            return {'success': False, 'error': f'分析失败: {str(e)}', '_status': 500}
-
-    result, cache_hit = _with_cache('analyze', [book_id, 'llm' if use_llm else 'nolllm'], _gen)
-    status = result.pop('_status', 200) if result.get('success', False) else result.pop('_status', 500)
-    return _ai_response(result, cache_hit=cache_hit), status
-
-
-# ========== T5：RAG 推荐（检索 + 生成 + 引用溯源） ==========
-@ai_bp.route('/rag-recommend', methods=['GET', 'POST'])
-def ai_rag_recommend():
-    """基于 RAG 的可解释推荐：
-    - 先从数据库 / 推荐引擎 检索 top-N 候选书籍（检索）
-    - 再把候选塞进提示词，交给 LLM 生成带引用的推荐理由（生成）
-    - 每个返回的推荐项附带 source_book_ids，可溯源
-    """
-    if request.method == 'POST':
-        data = request.get_json() or {}
-    else:
-        data = {
-            'user_id': request.args.get('user_id', type=int),
-            'query': request.args.get('query', ''),
-            'top_k': request.args.get('top_k', 3, type=int),
-        }
-
-    user_id = data.get('user_id')
-    query = (data.get('query') or '').strip()
-    top_k = int(data.get('top_k', 3))
-    top_k = max(1, min(10, top_k))
-
-    if not user_id and not query:
-        return _ai_response({'success': False, 'error': '需要 user_id 或 query'}), 400
-
-    def _gen():
-        try:
-            from .llm_engine import get_llm_engine
-            from extensions import db
-            from models import Book, Rating
+            db = _get_db()
+            Rating = _get_rating_model()
             from sqlalchemy import func
+            stats = db.session.query(
+                func.avg(Rating.rating), func.count(Rating.id)
+            ).filter(Rating.book_id == book_id).first()
+            avg_rating = stats[0]
+            rating_count = stats[1]
+        except Exception:
+            avg_rating = avg_rating or 0.0
+            rating_count = rating_count or 0
 
-            # ---------- 1) 检索：获取 top-N 候选书籍 ----------
-            candidates = []
-
-            # 有 user_id：先从 recommend advanced 拿候选（如果能），否则 fallback 到高评分
-            if user_id:
-                try:
-                    # 直接从评分最高的同分类+高评分书籍中取 top-20 候选
-                    liked = db.session.query(
-                        Rating.book_id, func.avg(Rating.rating).label('avg')
-                    ).filter(Rating.user_id == user_id
-                             ).group_by(Rating.book_id).order_by(func.avg(Rating.rating).desc()
-                                                                  ).limit(5).all()
-                    liked_ids = [r[0] for r in liked]
-                    # 同分类候选
-                    if liked_ids:
-                        categories = db.session.query(Book.category).filter(
-                            Book.id.in_(liked_ids), Book.category.isnot(None)
-                        ).distinct().limit(3).all()
-                        cats = [c[0] for c in categories if c and c[0]]
-                        if cats:
-                            rated_avg = db.session.query(
-                                Rating.book_id, func.count(Rating.id).label('cnt'),
-                                func.avg(Rating.rating).label('avg_r')
-                            ).group_by(Rating.book_id).subquery()
-                            rows = db.session.query(
-                                Book, rated_avg.c.avg_r
-                            ).outerjoin(rated_avg, Book.id == rated_avg.c.book_id
-                                         ).filter(Book.category.in_(cats)
-                                                  ).filter(Book.id.notin_(liked_ids)
-                                                           ).order_by(rated_avg.c.avg_r.desc().nullslast()
-                                                                      ).limit(top_k * 3).all()
-                            for b, avg_r in rows:
-                                candidates.append({
-                                    'book_id': b.id,
-                                    'title': b.title or '',
-                                    'author': b.author or '',
-                                    'category': b.category or '',
-                                    'year': b.year or 0,
-                                    'avg_rating': round(float(avg_r), 1) if avg_r is not None else None,
-                                })
-                except Exception:
-                    pass
-
-            # 如果候选不够：用 query 搜索 + 热门补齐
-            if len(candidates) < top_k and query:
-                try:
-                    from services.search_service import get_search_service
-                    svc = get_search_service()
-                    res = svc.search(query, limit=top_k * 3)
-                    for item in res['items']:
-                        candidates.append({
-                            'book_id': item['id'],
-                            'title': item.get('title', ''),
-                            'author': item.get('author', ''),
-                            'category': item.get('category', ''),
-                            'year': item.get('year', 0),
-                        })
-                except Exception:
-                    pass
-
-            # 仍然不够？热门 book top-N 兜底
-            if len(candidates) < top_k:
-                try:
-                    rows = db.session.query(
-                        Book, func.avg(Rating.rating).label('avg')
-                    ).outerjoin(Rating, Book.id == Rating.book_id
-                                ).group_by(Book.id).order_by(
-                                    func.count(Rating.id).desc()
-                                ).limit(top_k * 3).all()
-                    exists_ids = {c['book_id'] for c in candidates}
-                    for b, avg in rows:
-                        if b.id in exists_ids:
-                            continue
-                        candidates.append({
-                            'book_id': b.id,
-                            'title': b.title or '',
-                            'author': b.author or '',
-                            'category': b.category or '',
-                            'year': b.year or 0,
-                            'avg_rating': round(float(avg), 1) if avg is not None else None,
-                        })
-                        if len(candidates) >= top_k * 3:
-                            break
-                except Exception:
-                    pass
-
-            # 最终限制为 top_k * 2 个候选（给 LLM 做挑选）
-            candidates = candidates[: max(3, top_k * 2)]
-
-            if not candidates:
-                return {'success': False, 'error': '未检索到可供推荐的书籍', '_status': 404}
-
-            # ---------- 2) 生成：把候选作为知识上下文，交给 LLM 选 top_k 本 ----------
-            candidate_text = '\n'.join(
-                f"- id={c['book_id']} 《{c['title']}》 作者: {c['author']} "
-                f"分类: {c['category']} "
-                f"{'评分: ' + str(c['avg_rating']) if c.get('avg_rating') else ''}"
-                for c in candidates
-            )
-
-            intro = f"用户 #{user_id}" if user_id else "访客"
-            if query:
-                intro += f"，搜索关键词：{query}"
-
-            prompt = (
-                f"你是一位资深书探。以下是从图书馆检索到的候选书籍列表：\n"
-                f"{candidate_text}\n\n"
-                f"请从上述候选中为{intro}挑选 {top_k} 本最值得推荐的书。"
-                f"要求：\n"
-                f"1) 每本书必须引用它的 id\n"
-                f"2) 每本书给出 1-2 句个性化推荐理由\n"
-                f"3) 用简洁友好的中文回答。\n\n"
-                f"输出格式（严格 JSON）：[{{\"book_id\": <int>, \"title\": \"...\", \"reason\": \"...\", \"score\": <0-1 浮点数>}}]"
-            )
-
-            engine = get_llm_engine()
-            llm_resp = engine.generate(prompt)
-
-            # 解析 LLM 输出：优先 JSON 失败则提取文本直接返回
-            recommendations = []
-            source_ids = [c['book_id'] for c in candidates]
-            try:
-                import json as _json
-                text = (getattr(llm_resp, 'content', '') or '').strip()
-                # 寻找第一个 '[' 与最后一个 ']'
-                start = text.find('[')
-                end = text.rfind(']')
-                if 0 <= start < end:
-                    parsed = _json.loads(text[start:end + 1])
-                    if isinstance(parsed, list):
-                        seen_ids = set()
-                        for item in parsed:
-                            if not isinstance(item, dict):
-                                continue
-                            bid = int(item.get('book_id', 0) or 0)
-                            if bid <= 0 or bid in seen_ids:
-                                continue
-                            seen_ids.add(bid)
-                            recommendations.append({
-                                'book_id': bid,
-                                'title': item.get('title', ''),
-                                'reason': item.get('reason', ''),
-                                'score': round(float(item.get('score', 0.5)), 3),
-                            })
-                            if len(recommendations) >= top_k:
-                                break
-            except Exception:
-                pass
-
-            if not recommendations:
-                # 兜底：直接返回候选书籍（取 top_k），并把 LLM 的原始响应作为 explanation
-                for c in candidates[:top_k]:
-                    recommendations.append({
-                        'book_id': c['book_id'],
-                        'title': c['title'],
-                        'reason': '候选库推荐',
-                        'score': 0.6,
-                    })
-
-            return {
-                'success': True,
-                'recommendations': recommendations,
-                'explanation': getattr(llm_resp, 'content', ''),
-                'candidates_retrieved': len(candidates),
-                'sources': source_ids,
-                'retrieval_mode': 'rag',
-                '_status': 200,
-            }
-
-        except Exception as e:
-            return {'success': False, 'error': f'RAG 推荐生成失败: {str(e)}', '_status': 500}
-
-    result, cache_hit = _with_cache(
-        'rag_recommend',
-        [user_id or 'guest', hash(query), top_k],
-        _gen
-    )
-    status = result.pop('_status', 200) if result.get('success', False) else result.pop('_status', 500)
-    return _ai_response(result, cache_hit=cache_hit), status
+    card = {
+        "book_id": book_id,
+        "title": title,
+        "author": author,
+        "category": category,
+        "year": int(year) if year else 0,
+        "publisher": publisher,
+        "image_url": image_url,
+        "avg_rating": round(float(avg_rating or 0.0), 2),
+        "rating_count": int(rating_count or 0),
+        "similarity": round(float(similarity), 3) if similarity is not None else None,
+        "match_reason": match_reason,
+    }
+    return card
 
 
-# ========== 对话式推荐：关键词识别 + 多策略推荐 + LLM 自然语言回复 ==========
-
-_RECOMMEND_KEYWORDS = [
-    '推荐', '找书', '想看', '类似', '好书', '推荐书',
-    '有什么', 'recommend', 'suggest', 'book for me',
-    '推荐一本', '什么书', '类似的书',
+# ============ 意图识别 ============
+_INTENT_RULES = [
+    ("recommend", ["推荐", "荐书", "有什么书", "给我推荐", "有哪些", "推荐书",
+                   "推荐几本", "想读", "想看", "找书", "recommend", "suggest"]),
+    ("similar",   ["相似", "类似", "相近", "同类型", "像...这样", "similar", "like"]),
+    ("detail",    ["介绍", "详情", "关于这本书", "讲讲", "简介", "什么书", "写什么",
+                   "内容", "about", "summary", "介绍一下"]),
+    ("greeting",  ["你好", "hello", "hi", "嗨", "您好", "在吗"]),
+    ("thanks",    ["谢谢", "thank", "thanks", "不错", "很好"]),
 ]
 
 
-def _is_recommend_intent(message: str) -> bool:
-    """判断一条消息是否为推荐意图（关键词匹配）"""
+def _detect_intent(text: str) -> str:
+    t = (text or "").strip().lower()
+    if not t:
+        return "unknown"
+    for intent, kws in _INTENT_RULES:
+        for kw in kws:
+            if kw.lower() in t:
+                return intent
+    # 如果包含书名号或引号包裹 -> 视为书籍详情查询
+    if re.search(r"[《「\"']", text):
+        return "detail"
+    # 如果内容很短 (< 6 个字) 也视为直接查询书籍
+    if len(t) < 6 and not any(p in t for p in ["？", "?", "吗"]):
+        return "detail"
+    return "search"
+
+
+def _extract_book_keyword(text: str) -> str:
+    """从用户问题里提取书籍检索关键词。
+    优先使用书名号/引号中的内容；否则去掉语气词后作为关键词。"""
+    m = re.search(r"[《「\"'](.{1,80}?)[》」\"']", text or "")
+    if m:
+        return m.group(1).strip()
+    # 兜底：去语气词 & 前后缀后返回
+    cleaned = re.sub(r"(你好|请问|帮我|告诉|一下|介绍|推荐|我想知道|我想找|这本书|那本书|有什么|有哪些|吗|呢|啊|呀|的书|关于|关于这本书)",
+                     "", text or "", flags=re.IGNORECASE).strip()
+    cleaned = re.sub(r"[《》「」\"'？?,，。.!！]", "", cleaned).strip()
+    return cleaned[:60]
+
+
+# ============ 检索：书名精确/模糊匹配 ============
+def _search_by_title(keyword: str, top_k: int = 5) -> List[Dict]:
+    """书名关键词检索，返回卡片。使用 LIKE 做模糊匹配。"""
+    if not keyword:
+        return []
     try:
-        if not message:
-            return False
-        text = str(message).strip().lower()
-        if not text:
-            return False
-        for kw in _RECOMMEND_KEYWORDS:
-            if kw.lower() in text:
-                return True
-        return False
-    except Exception:
-        return False
-
-
-def _run_recommend(user_id, n_recommendations=5):
-    """内部调用推荐服务（MMR 为主，失败回落 cold-start）
-
-    返回 (recommendations_list, strategy_used)
-    recommendations_list 的每项至少包含 book_id / title / reason / score
-    """
-    if n_recommendations is None or n_recommendations <= 0:
-        n_recommendations = 5
-    try:
-        n_recommendations = int(n_recommendations)
-    except Exception:
-        n_recommendations = 5
-    n_recommendations = max(1, min(20, n_recommendations))
-
-    # ----- 策略 1：MMR -----
-    try:
-        from services.content_filter import (
-            get_content_recommender, get_item_based_cf,
-        )
-        from services.embedding_service import get_embedding_service
-        from services.cf_algorithm import CollaborativeFiltering
-        from services.svd_algorithm import SVDRecommendation
-        from extensions import db
-        from sqlalchemy import func
-        from models import Book, Rating
-
-        pool = {}
-        pool_size = max(n_recommendations * 3, 20)
-
-        try:
-            cf_engine = CollaborativeFiltering()
-            cf_recs = cf_engine.recommend(user_id, n_recommendations=pool_size) or []
-            for rank, rec in enumerate(cf_recs):
-                bid = rec.get('book_id') if isinstance(rec, dict) else None
-                if not bid:
-                    continue
-                rel_score = max(0.0, 1.0 - rank * 0.02)
-                pool.setdefault(int(bid), {'score': 0.0})
-                pool[int(bid)]['score'] += rel_score
-        except Exception:
-            pass
-
-        try:
-            svd_engine = SVDRecommendation()
-            svd_recs = svd_engine.recommend(user_id, n_recommendations=pool_size) or []
-            for rank, rec in enumerate(svd_recs):
-                bid = rec.get('book_id') if isinstance(rec, dict) else None
-                if not bid:
-                    continue
-                rel_score = max(0.0, 0.9 - rank * 0.02)
-                pool.setdefault(int(bid), {'score': 0.0})
-                pool[int(bid)]['score'] += rel_score
-        except Exception:
-            pass
-
-        try:
-            embed_svc = get_embedding_service()
-            if embed_svc is not None and hasattr(embed_svc, 'recommend_books'):
-                sem_recs = embed_svc.recommend_books(user_id, top_k=pool_size) or []
-                for rank, rec in enumerate(sem_recs[:pool_size]):
-                    bid = rec.get('book_id') if isinstance(rec, dict) else rec
-                    if not bid:
-                        continue
-                    rel_score = max(0.0, 0.8 - rank * 0.02)
-                    pool.setdefault(int(bid), {'score': 0.0})
-                    pool[int(bid)]['score'] += rel_score
-        except Exception:
-            pass
-
-        try:
-            content_engine = get_content_recommender()
-            content_recs = content_engine.recommend(user_id, n=pool_size, seed=42) or []
-            for rank, rec in enumerate(content_recs):
-                bid = rec.get('book_id') if isinstance(rec, dict) else None
-                if not bid:
-                    continue
-                rel_score = float(rec.get('score', 0.0) or 0.0)
-                pool.setdefault(int(bid), {'score': 0.0})
-                pool[int(bid)]['score'] += rel_score
-        except Exception:
-            pass
-
-        # 去已读
-        try:
-            rated_rows = db.session.query(Rating.book_id).filter(Rating.user_id == user_id).all()
-            rated_ids = {int(r[0]) for r in rated_rows}
-            for bid in list(pool.keys()):
-                if bid in rated_ids:
-                    del pool[bid]
-        except Exception:
-            pass
-
-        if pool:
-            # 简单贪心 MMR（按 score 排序 + 保证分类多样性）
-            ranked = sorted(pool.items(), key=lambda kv: float(kv[1]['score']), reverse=True)
-            all_ids = [bid for bid, _ in ranked]
-            book_map = {b.id: b for b in Book.query.filter(Book.id.in_(all_ids)).all()} if all_ids else {}
-
-            selected = []
-            seen_categories = set()
-            for bid, meta in ranked:
-                book = book_map.get(bid)
-                if book is None:
-                    continue
-                cat = getattr(book, 'category', None) or ''
-                score = float(meta.get('score', 0.0))
-                # 简单多样性惩罚：已出现过的分类降权
-                if cat and cat in seen_categories:
-                    score *= 0.75
-                selected.append((bid, book, score, cat))
-                if cat:
-                    seen_categories.add(cat)
-                if len(selected) >= n_recommendations * 2:
-                    break
-            selected.sort(key=lambda x: x[2], reverse=True)
-            selected = selected[:n_recommendations]
-
-            if selected:
-                from services.content_filter import get_explainability
-                explainer = get_explainability()
-                user_profile = {}
-                try:
-                    user_profile = get_content_recommender().get_user_profile(user_id)
-                except Exception:
-                    user_profile = {'size': 0, 'authors': {}, 'categories': {}}
-
-                recommendations = []
-                for bid, book, score, cat in selected:
-                    try:
-                        reason = explainer.generate_reason(
-                            book, sources=['content_based', 'cf'],
-                            user_profile=user_profile,
-                        )
-                    except Exception:
-                        reason = f'based on your interest in {cat or "similar"} books'
-                    try:
-                        book_dict = book.to_dict() if hasattr(book, 'to_dict') else {
-                            'id': getattr(book, 'id', bid),
-                            'title': getattr(book, 'title', ''),
-                            'author': getattr(book, 'author', ''),
-                            'category': cat,
-                        }
-                    except Exception:
-                        book_dict = {
-                            'id': bid, 'title': getattr(book, 'title', ''),
-                            'author': getattr(book, 'author', ''), 'category': cat,
-                        }
-                    book_dict['book_id'] = bid
-                    book_dict['reason'] = reason
-                    book_dict['score'] = round(float(score), 3)
-                    recommendations.append(book_dict)
-                return recommendations, 'mmr_hybrid'
-    except Exception:
-        pass
-
-    # ----- 策略 2：cold-start 兜底 -----
-    try:
-        from extensions import db
-        from sqlalchemy import func
-        from models import Book, Rating
-
-        top_n = max(n_recommendations * 5, 50)
-        try:
-            sub = db.session.query(
-                Rating.book_id,
-                func.count(Rating.id).label('cnt'),
-                func.avg(Rating.rating).label('avg'),
-            ).group_by(Rating.book_id).order_by(
-                func.count(Rating.id).desc()
-            ).limit(top_n).subquery()
-            stats = db.session.query(sub.c.book_id, sub.c.cnt, sub.c.avg).all()
-            stats_map = {}
-            for bid, cnt, avg in stats:
-                try:
-                    bid = int(bid)
-                    if int(cnt or 0) <= 0:
-                        continue
-                    stats_map[bid] = (int(cnt or 0), float(avg or 0.0))
-                except Exception:
-                    continue
-        except Exception:
-            stats_map = {}
-
-        books = []
-        if stats_map:
-            try:
-                book_objs = Book.query.filter(Book.id.in_(list(stats_map.keys()))).all()
-                for b in book_objs:
-                    cnt, avg = stats_map.get(b.id, (0, 0.0))
-                    books.append((b, cnt, avg))
-            except Exception:
-                books = []
-        if not books:
-            try:
-                for b in Book.query.order_by(Book.id).limit(n_recommendations * 3).all():
-                    books.append((b, 1, 8.0))
-            except Exception:
-                books = []
-
-        if books:
-            # 保证分类多样性
-            buckets = {}
-            for b, cnt, avg in books:
-                cat = getattr(b, 'category', None) or 'misc'
-                buckets.setdefault(cat, []).append((b, cnt, avg))
-            picks = []
-            for cat, items in sorted(buckets.items(), key=lambda kv: -len(kv[1])):
-                items_sorted = sorted(items, key=lambda x: x[2], reverse=True)
-                if items_sorted:
-                    picks.append((items_sorted[0][0], items_sorted[0][1], items_sorted[0][2], cat))
-            # 剩余用高分补齐
-            all_sorted = sorted(books, key=lambda x: x[2], reverse=True)
-            seen_ids = {p[0].id for p in picks}
-            for b, cnt, avg in all_sorted:
-                if b.id in seen_ids:
-                    continue
-                picks.append((b, cnt, avg, 'popular'))
-                seen_ids.add(b.id)
-                if len(picks) >= n_recommendations:
-                    break
-
-            recommendations = []
-            for b, cnt, avg, cat in picks[:n_recommendations]:
-                try:
-                    book_dict = b.to_dict() if hasattr(b, 'to_dict') else {
-                        'id': b.id, 'title': getattr(b, 'title', ''),
-                        'author': getattr(b, 'author', ''), 'category': cat,
-                    }
-                except Exception:
-                    book_dict = {
-                        'id': b.id, 'title': getattr(b, 'title', ''),
-                        'author': getattr(b, 'author', ''), 'category': cat,
-                    }
-                book_dict['book_id'] = b.id
-                book_dict['reason'] = f'popular {cat or "category"} book with high community ratings'
-                book_dict['score'] = round(float(avg) / 10.0, 3) if avg else 0.7
-                recommendations.append(book_dict)
-            if recommendations:
-                return recommendations, 'cold_start'
-    except Exception:
-        pass
-
-    return [], 'none'
-
-
-def _build_llm_reply(message, user_id, recommendations) -> str:
-    """基于推荐结果，调用 LLM 生成自然语言回复"""
-    try:
-        from .llm_engine import get_llm_engine
-        engine = get_llm_engine()
-        if engine is None:
-            raise RuntimeError('llm engine unavailable')
-
-        items_text = []
-        for idx, r in enumerate(recommendations[:10], start=1):
-            title = r.get('title') or r.get('book_title') or f'Book #{r.get("book_id", idx)}'
-            author = r.get('author') or ''
-            reason = r.get('reason') or 'recommended for you'
-            score = r.get('score') or r.get('content_score') or 0.7
-            try:
-                score_f = float(score)
-                rating = round(score_f * 5, 1) if score_f <= 1 else round(score_f, 1)
-            except Exception:
-                rating = 4.0
-            items_text.append(
-                f"{idx}. 《{title}》{(' by ' + author) if author else ''}\n"
-                f"   理由: {reason}\n"
-                f"   匹配评分: {rating}/5.0"
-            )
-
-        prompt = (
-            f"用户说：「{message[:200]}」\n\n"
-            f"以下是为用户 #{user_id if user_id else 'guest'} 推荐的书籍：\n"
-            f"{chr(10).join(items_text)}\n\n"
-            f"请你作为一位友好的书店导购，用自然的中文回复用户：\n"
-            f"1) 先回应用户的请求；\n"
-            f"2) 简洁列出每本书的书名、推荐理由和匹配评分；\n"
-            f"3) 最后给一句鼓励性的结束语。\n"
-            f"不要输出 JSON，直接输出对话文本。"
-        )
-
-        try:
-            resp = engine.generate(prompt)
-            text = getattr(resp, 'content', None)
-            if text:
-                return str(text).strip()
-        except Exception:
-            pass
-    except Exception:
-        pass
-
-    # 降级：模板化回复
-    lines = ['你好！根据你的需求，我为你精选了以下几本书：\n']
-    for idx, r in enumerate(recommendations[:10], start=1):
-        title = r.get('title') or f'Book #{r.get("book_id", idx)}'
-        reason = r.get('reason') or 'recommended for you'
-        try:
-            score_f = float(r.get('score') or 0.7)
-            rating = round(score_f * 5, 1) if score_f <= 1 else round(score_f, 1)
-        except Exception:
-            rating = 4.0
-        lines.append(f"{idx}. 《{title}》\n   理由: {reason}\n   评分: {rating}/5.0\n")
-    lines.append('希望其中有你喜欢的一本，祝你阅读愉快！')
-    return '\n'.join(lines)
-
-
-@ai_bp.route('/conversational-recommend', methods=['POST'])
-def ai_conversational_recommend():
-    """对话式推荐：识别推荐意图 -> 多路召回 -> LLM 自然语言回复"""
-    try:
-        data = request.get_json() or {}
-        message = (data.get('message') or '').strip()
-        user_id = data.get('user_id')
-        conversation_id = data.get('conversation_id') or f'conv_{int(time.time() * 1000)}'
-        n_recommendations = data.get('n_recommendations', 5)
-
-        is_intent = _is_recommend_intent(message)
-        if not message:
-            return jsonify({
-                'success': False,
-                'error': 'message is required',
-                'is_recommend_intent': False,
-                'conversation_id': conversation_id,
-                'reply': '',
-                'recommendations': [],
-            }), 400
-
-        # 非推荐意图：直接走 LLM 闲聊回复
-        if not is_intent:
-            try:
-                from .llm_engine import get_llm_engine
-                engine = get_llm_engine()
-                resp = engine.generate(message) if engine else None
-                reply_text = getattr(resp, 'content', None) or (
-                    f'我收到了你的消息：「{message[:80]}」，'
-                    f'如果你想让我为你推荐书籍，请包含"推荐"、"找书"等关键词，'
-                    f'我会为你挑选最合适的书。'
-                )
-            except Exception:
-                reply_text = (
-                    f'我收到了你的消息：「{message[:80]}」，'
-                    f'如果你想让我为你推荐书籍，请包含"推荐"、"找书"等关键词。'
-                )
-            return jsonify({
-                'success': True,
-                'is_recommend_intent': False,
-                'conversation_id': conversation_id,
-                'reply': str(reply_text),
-                'recommendations': [],
-            }), 200
-
-        # 推荐意图：调用多路召回
-        try:
-            recommendations, strategy = _run_recommend(user_id, n_recommendations)
-        except Exception:
-            recommendations, strategy = [], 'none'
-
-        # 如果为空，再尝试一次 cold-start 兜底
-        if not recommendations:
-            try:
-                recommendations, strategy = _run_recommend(user_id, n_recommendations)
-            except Exception:
-                recommendations, strategy = [], 'none'
-
-        reply_text = _build_llm_reply(message, user_id, recommendations)
-
-        return jsonify({
-            'success': True,
-            'is_recommend_intent': True,
-            'conversation_id': conversation_id,
-            'reply': reply_text,
-            'recommendations': recommendations[: int(n_recommendations or 5)],
-            'strategy_used': strategy,
-        }), 200
-
+        Book = _get_book_model()
+        rows = Book.query.filter(Book.title.ilike(f"%{keyword}%")).limit(top_k).all()
+        cards = []
+        for r in rows:
+            cards.append(_row_to_book_card(r, match_reason=f"书名包含关键词“{keyword[:20]}”"))
+        return cards
     except Exception as e:
-        logger.exception('conversational-recommend failed')
-        return jsonify({
-            'success': False,
-            'error': str(e),
-            'is_recommend_intent': False,
-            'conversation_id': (request.get_json() or {}).get('conversation_id') or '',
-            'reply': '抱歉，推荐服务暂时不可用，请稍后再试。',
-            'recommendations': [],
-        }), 500
+        logger.warning(f"_search_by_title 失败: {e}")
+        return []
 
 
-# ========== AI + FAISS + Recommend 健康状态汇总 ==========
-@ai_bp.route('/recommend-status', methods=['GET'])
-def ai_recommend_status():
-    """返回 AI / FAISS / Recommend 三套服务的健康状态"""
-    status = {
-        'success': True,
-        'llm': {'available': False, 'error': None, 'details': {}},
-        'faiss': {'available': False, 'error': None, 'details': {}},
-        'recommend': {'available': False, 'error': None, 'details': {}},
+def _search_by_author(keyword: str, top_k: int = 5) -> List[Dict]:
+    if not keyword:
+        return []
+    try:
+        Book = _get_book_model()
+        rows = Book.query.filter(Book.author.ilike(f"%{keyword}%")).limit(top_k).all()
+        cards = []
+        for r in rows:
+            cards.append(_row_to_book_card(r, match_reason=f"作者名包含“{keyword[:20]}”"))
+        return cards
+    except Exception as e:
+        logger.warning(f"_search_by_author 失败: {e}")
+        return []
+
+
+def _search_by_category(keyword: str, top_k: int = 5) -> List[Dict]:
+    if not keyword:
+        return []
+    try:
+        Book = _get_book_model()
+        rows = Book.query.filter(Book.category.ilike(f"%{keyword}%")).limit(top_k).all()
+        cards = []
+        for r in rows:
+            cards.append(_row_to_book_card(r, match_reason=f"分类包含“{keyword[:20]}”"))
+        return cards
+    except Exception as e:
+        logger.warning(f"_search_by_category 失败: {e}")
+        return []
+
+
+# ============ 检索："热门 / 高分" 作为兜底推荐 ============
+def _search_popular(top_k: int = 6) -> List[Dict]:
+    """图书馆里评分最高、评价人数较多的书。"""
+    try:
+        from sqlalchemy import func
+        Book = _get_book_model()
+        Rating = _get_rating_model()
+        db = _get_db()
+        rows = (
+            db.session.query(Book, func.avg(Rating.rating).label("avg_r"), func.count(Rating.id).label("cnt"))
+            .join(Rating, Rating.book_id == Book.id, isouter=True)
+            .group_by(Book.id)
+            .order_by(func.count(Rating.id).desc(), func.avg(Rating.rating).desc())
+            .limit(top_k * 3)
+            .all()
+        )
+        # 按 (评分人数, 平均评分) 排序，取 top_k
+        rows_sorted = sorted(rows, key=lambda r: (-(r[2] or 0), -(r[1] or 0)))[:top_k]
+        cards = []
+        for book, avg_r, cnt in rows_sorted:
+            cards.append(_row_to_book_card(
+                book, avg_rating=avg_r, rating_count=cnt,
+                match_reason="图书馆热门高分"
+            ))
+        return cards
+    except Exception as e:
+        logger.warning(f"_search_popular 失败: {e}")
+        return []
+
+
+def _search_recent(top_k: int = 6) -> List[Dict]:
+    """按出版年份倒序（新版书优先）。"""
+    try:
+        Book = _get_book_model()
+        rows = Book.query.filter(Book.year != None).order_by(Book.year.desc()).limit(top_k).all()
+        cards = [_row_to_book_card(r, match_reason=f"{r.year} 年出版") for r in rows]
+        return cards
+    except Exception as e:
+        logger.warning(f"_search_recent 失败: {e}")
+        return []
+
+
+# ============ 检索：FAISS 语义搜索 + 字符串关键词 fallback ============
+def _semantic_search(query: str, top_k: int = None) -> List[Dict]:
+    """语义 + 关键词混合搜索。
+    顺序：
+      1) 对整句做书名/作者/分类 LIKE 匹配 —— 对英文书 / 明确关键词最可靠
+      2) 对分词后的 tokens 再做一轮 LIKE 匹配
+      3) 用 FAISS 向量搜索补充（结果会做信息完整性校验）
+      4) 还不够 -> 用热门高分书籍兜底
+    """
+    if top_k is None:
+        top_k = SEARCH_TOP_K
+
+    seen_ids = set()
+    combined: List[Dict] = []
+
+    def _extend(cards: List[Dict], reason_override: str = None):
+        for c in cards:
+            # 基础校验：必须有 book_id 和 title
+            if not c.get("book_id") or not c.get("title"):
+                continue
+            if c["book_id"] in seen_ids:
+                continue
+            seen_ids.add(c["book_id"])
+            if reason_override:
+                c["match_reason"] = reason_override
+            combined.append(c)
+            if len(combined) >= top_k:
+                return
+
+    # 1) 整句精确 / 模糊匹配
+    q = (query or "").strip()
+    if q:
+        _extend(_search_by_title(q, top_k=top_k), reason_override=f"书名匹配“{q[:24]}”")
+        if len(combined) < top_k:
+            _extend(_search_by_author(q, top_k=top_k // 2),
+                    reason_override=f"作者匹配“{q[:24]}”")
+        if len(combined) < top_k:
+            _extend(_search_by_category(q, top_k=top_k // 2),
+                    reason_override=f"分类匹配“{q[:24]}”")
+
+    # 2) 分词匹配
+    tokens = _tokenize_query(query)
+    for tok in tokens:
+        if len(combined) >= top_k:
+            break
+        _extend(_search_by_title(tok, top_k=top_k // 2))
+        if len(combined) >= top_k:
+            break
+        _extend(_search_by_author(tok, top_k=max(1, top_k // 3)))
+        if len(combined) >= top_k:
+            break
+        _extend(_search_by_category(tok, top_k=max(1, top_k // 3)))
+
+    # 3) FAISS 向量搜索（仅做补充，且必须校验结果完整性）
+    if len(combined) < top_k:
+        try:
+            from services.embedding_service import get_embedding_service
+            svc = get_embedding_service()
+            if svc is not None and getattr(svc, "faiss_ready", False):
+                results = svc.find_similar_books_by_text(
+                    query, top_k=top_k, threshold=SIMILARITY_THRESHOLD
+                ) or []
+                valid = []
+                for item in results:
+                    bid = int(item.get("book_id") or 0)
+                    title = (item.get("title") or "").strip()
+                    if bid <= 0 or not title:
+                        # FAISS 返回的条目缺失基础信息 -> 用数据库补一下
+                        if bid > 0:
+                            fresh = _get_book_by_id(bid)
+                            if fresh and fresh.get("title"):
+                                fresh["similarity"] = item.get("similarity")
+                                fresh["match_reason"] = "语义搜索"
+                                valid.append(fresh)
+                        continue
+                    valid.append(_row_to_book_card(
+                        item,
+                        avg_rating=item.get("avg_rating"),
+                        rating_count=item.get("rating_count"),
+                        similarity=item.get("similarity"),
+                        match_reason="语义搜索",
+                    ))
+                _extend(valid)
+        except Exception as e:
+            logger.info(f"_semantic_search: FAISS 路径不可用: {e}")
+
+    # 4) 还不够 -> 用热门书兜底（确保至少有推荐）
+    if len(combined) < max(3, top_k // 2):
+        _extend(_search_popular(top_k=top_k))
+
+    return combined[:top_k]
+
+
+def _tokenize_query(query: str) -> List[str]:
+    """极简分词：按标点、空白切分；英文词直接保留，中文按 2-3 字切出 N-gram。"""
+    raw = [x for x in re.split(r"[\s\-_/\\,，。.!！?？；;：:()（）\[\]【】《》\"'`~]+",
+                                query or "") if x]
+    tokens = []
+    for piece in raw:
+        if re.match(r"^[A-Za-z0-9]+$", piece) and len(piece) >= 2:
+            tokens.append(piece)
+        else:
+            # 中文/混合文本：生成 2-3 字窗口
+            for L in (3, 2):
+                for i in range(0, max(0, len(piece) - L + 1)):
+                    tokens.append(piece[i:i + L])
+    # 去重 + 截断
+    seen = set()
+    out = []
+    for t in tokens:
+        if t not in seen and 2 <= len(t) <= 30:
+            seen.add(t)
+            out.append(t)
+        if len(out) >= 10:
+            break
+    return out
+
+
+# ============ 检索：按 ID 取单本书详情 ============
+def _get_book_by_id(book_id: int) -> Optional[Dict]:
+    try:
+        Book = _get_book_model()
+        row = Book.query.get(int(book_id))
+        if not row:
+            return None
+        return _row_to_book_card(row, match_reason="书籍详情")
+    except Exception as e:
+        logger.warning(f"_get_book_by_id 失败: {e}")
+        return None
+
+
+# ============ LLM: Ollama 调用 ============
+def _ollama_available() -> bool:
+    try:
+        import requests
+        r = requests.get(f"{_OLLAMA_HOST}/api/tags", timeout=3)
+        return r.status_code == 200
+    except Exception:
+        return False
+
+
+def _ollama_generate(prompt: str, system: str = None,
+                     temperature: float = 0.7, max_tokens: int = 800) -> str:
+    if not prompt:
+        return ""
+    try:
+        import requests
+        payload = {
+            "model": _OLLAMA_CHAT_MODEL,
+            "prompt": prompt,
+            "stream": False,
+            "options": {
+                "temperature": temperature,
+                "num_ctx": 2048,
+                "num_predict": max_tokens,
+            },
+        }
+        if system:
+            payload["system"] = system
+        r = requests.post(f"{_OLLAMA_HOST}/api/generate", json=payload,
+                          timeout=_OLLAMA_TIMEOUT)
+        if r.status_code == 200:
+            data = r.json()
+            text = (data.get("response") or "").strip()
+            return text
+    except Exception as e:
+        logger.warning(f"_ollama_generate 失败: {e}")
+    return ""
+
+
+# ============ 提示词构建 ============
+def _build_prompt_for_recommend(user_message: str, books: List[Dict]) -> Tuple[str, str]:
+    book_lines = []
+    for i, b in enumerate(books[:8], start=1):
+        line = f"{i}. 《{b['title']}》"
+        if b.get("author"):
+            line += f"  by {b['author']}"
+        if b.get("year"):
+            line += f"  ({b['year']})"
+        if b.get("category") and b["category"] != "未分类":
+            line += f"  [{b['category']}]"
+        if b.get("avg_rating"):
+            line += f"  评分 {b['avg_rating']}/10 ({b.get('rating_count', 0)}人评价)"
+        book_lines.append(line)
+    system = (
+        "你是一位友善、专业的书店导购员。"
+        "只使用用户给你的书籍清单来进行推荐，不要虚构不存在的书。"
+        "回答中请把每本书的要点说清楚（作者、主题、适合人群等）。"
+        "语言自然，不要机械套模板。中文回答，控制在 300 字以内。"
+    )
+    prompt = (
+        f"用户说：「{user_message}」\n\n"
+        f"图书馆里找到了以下相关书籍：\n"
+        f"{chr(10).join(book_lines)}\n\n"
+        f"请从以上书籍中挑出最合适的 3-5 本，用自然中文推荐给用户，"
+        f"简要说明每本书为什么值得读。不要输出不存在的书。"
+    )
+    return system, prompt
+
+
+def _build_prompt_for_detail(user_message: str, book: Dict) -> Tuple[str, str]:
+    info = []
+    info.append(f"书名：《{book.get('title', '')}》")
+    if book.get("author"):
+        info.append(f"作者：{book['author']}")
+    if book.get("year"):
+        info.append(f"出版年份：{book['year']}")
+    if book.get("publisher"):
+        info.append(f"出版社：{book['publisher']}")
+    if book.get("category") and book["category"] != "未分类":
+        info.append(f"分类：{book['category']}")
+    if book.get("avg_rating"):
+        info.append(f"平均评分：{book['avg_rating']}/10（{book.get('rating_count', 0)} 人评价）")
+    info_block = "\n".join(info)
+
+    system = (
+        "你是一位热爱阅读、善于总结的书店导购。"
+        "只使用下方“基本资料”里的信息来回答，不要编造不存在的内容。"
+        "回答结构：先一句话推荐，再简要概述主题/内容，最后说明适合人群。"
+        "中文回答，控制在 250 字以内。"
+    )
+    prompt = (
+        f"用户想了解：「{user_message}」\n\n"
+        f"该书的基本资料：\n{info_block}\n\n"
+        f"请基于以上资料，用自然、有吸引力的中文介绍这本书。"
+    )
+    return system, prompt
+
+
+def _build_prompt_for_search(user_message: str, books: List[Dict]) -> Tuple[str, str]:
+    book_lines = [f"{i+1}. 《{b['title']}》  by {b.get('author','')}" for i, b in enumerate(books[:8])]
+    system = (
+        "你是一位乐于助人的书店导购。基于下面的真实书籍清单，"
+        "用简洁的中文为用户总结最相关的 3-5 本，给出简短的推荐理由。"
+    )
+    prompt = (
+        f"用户搜索：「{user_message}」\n\n"
+        f"图书馆检索结果：\n{chr(10).join(book_lines)}\n\n"
+        f"请向用户推荐最相关的 3-5 本并简述理由。"
+    )
+    return system, prompt
+
+
+# ============ RAG 主流程 ============
+def _rag_chat(user_message: str) -> Dict:
+    t0 = time.time()
+    msg = (user_message or "").strip()
+    if not msg:
+        return {
+            "success": False,
+            "error": "消息不能为空",
+            "reply": "你想聊点什么？可以问我推荐书、或描述你想看的主题～",
+            "books": [],
+            "intent": "unknown",
+            "retrieved_count": 0,
+        }
+
+    intent = _detect_intent(msg)
+    keyword = _extract_book_keyword(msg)
+    books: List[Dict] = []
+    retrieved_count = 0
+    reply = ""
+
+    # ---- 检索分支 ----
+    if intent == "greeting":
+        reply = (
+            "你好！我是你的图书 AI 助手 📚\n"
+            "我可以帮你做这些：\n"
+            "• 回答具体某本书的信息，比如「《Harry Potter》讲什么」\n"
+            "• 根据主题推荐书，比如「推荐几本关于历史的书」\n"
+            "• 找某位作者的作品，比如「找几本 J. K. Rowling 的书」\n"
+            "试试看，告诉我你想找什么样的书？"
+        )
+        books = _search_popular(top_k=3)
+        retrieved_count = len(books)
+
+    elif intent == "thanks":
+        reply = "不客气！祝你阅读愉快 📖。如果还想找别的书，随时告诉我。"
+
+    elif intent == "detail":
+        # 精准书名查询
+        title_matches = _search_by_title(keyword, top_k=3)
+        author_matches = [] if not keyword else _search_by_author(keyword, top_k=3)
+        combined = title_matches + [b for b in author_matches if b["book_id"] not in
+                                     {x["book_id"] for x in title_matches}]
+        retrieved_count = len(combined)
+        if combined:
+            books = [combined[0]]  # 详情模式只展示一本最相关的
+        else:
+            # 完全匹配不到 -> 再试一遍语义/热门
+            books = _semantic_search(msg, top_k=3)
+            retrieved_count = len(books)
+
+    elif intent in ("recommend", "similar"):
+        # 语义搜索 -> 个性化推荐
+        semantic = _semantic_search(msg, top_k=SEARCH_TOP_K)
+        retrieved_count = len(semantic)
+        if semantic:
+            # 按评分 & 评价人数二次挑选
+            scored = sorted(
+                semantic,
+                key=lambda b: (-(b.get("similarity") or 0),
+                               -(b.get("rating_count") or 0),
+                               -(b.get("avg_rating") or 0))
+            )
+            books = scored[:RECOMMEND_TOP_K]
+        else:
+            # 搜索不到 -> 用热门兜底
+            books = _search_popular(top_k=RECOMMEND_TOP_K)
+            retrieved_count = len(books)
+
+    else:  # search / unknown
+        books = _semantic_search(msg, top_k=RECOMMEND_TOP_K)
+        retrieved_count = len(books)
+
+    # ---- 生成分支 ----
+    if reply:  # greeting/thanks 已经写好
+        pass
+    elif not books:
+        reply = (
+            f"抱歉，我没能在图书馆找到与「{msg[:40]}」相关的书籍。\n"
+            f"你可以试试：\n"
+            f"• 换一个关键词（比如书名、作者或主题）\n"
+            f"• 问「推荐几本热门的书」，我会帮你推荐高分书籍\n"
+            f"• 用英文书名试试，图书馆里英文图书较多"
+        )
+    else:
+        # 先尝试 LLM 生成
+        system, prompt = None, None
+        if intent == "detail":
+            system, prompt = _build_prompt_for_detail(msg, books[0])
+        elif intent in ("recommend", "similar"):
+            system, prompt = _build_prompt_for_recommend(msg, books)
+        else:
+            system, prompt = _build_prompt_for_search(msg, books)
+
+        llm_text = ""
+        if prompt and _ollama_available():
+            llm_text = _ollama_generate(prompt, system=system, temperature=0.7)
+
+        if llm_text and len(llm_text) > 10:
+            reply = llm_text
+        else:
+            # LLM 不可用或回复过短 -> 模板回复（保证功能不依赖 LLM）
+            reply = _template_reply(intent, msg, books)
+
+    # ---- 组装返回 ----
+    return {
+        "success": True,
+        "intent": intent,
+        "reply": reply,
+        "books": books,
+        "retrieved_count": retrieved_count,
+        "elapsed_ms": int((time.time() - t0) * 1000),
     }
 
-    # LLM 状态
-    try:
-        from .llm_engine import get_llm_engine
-        engine = get_llm_engine()
-        if engine is not None and hasattr(engine, 'get_status'):
-            details = engine.get_status() or {}
-            status['llm']['details'] = details
-            status['llm']['available'] = bool(details.get('available')) or bool(details.get('ollama_available'))
-        else:
-            status['llm']['available'] = engine is not None
-    except Exception as e:
-        status['llm']['error'] = str(e)
 
-    # FAISS / embedding 状态
+def _template_reply(intent: str, user_message: str, books: List[Dict]) -> str:
+    """当 LLM 不可用时，用模板回复兜底。"""
+    if not books:
+        return "（系统繁忙，暂时无法调用语言模型，请稍后再试。）"
+
+    if intent == "detail":
+        b = books[0]
+        parts = [f"《{b['title']}》"]
+        if b.get("author"):
+            parts.append(f"作者是 {b['author']}")
+        if b.get("year"):
+            parts.append(f"{b['year']} 年出版")
+        if b.get("category") and b["category"] != "未分类":
+            parts.append(f"属于 {b['category']} 分类")
+        if b.get("avg_rating"):
+            parts.append(f"平均评分 {b['avg_rating']}/10（{b.get('rating_count', 0)} 人评价）")
+        return "这是从图书馆里查到的信息：\n" + "；\n".join(parts) + "。"
+
+    # recommend / similar / search
+    lines = ["根据你的需求，我从图书馆里挑出以下几本书：\n"]
+    for i, b in enumerate(books[:6], start=1):
+        line = f"{i}. 《{b['title']}》"
+        if b.get("author"):
+            line += f" —— {b['author']}"
+        if b.get("category") and b["category"] != "未分类":
+            line += f"（{b['category']}）"
+        if b.get("avg_rating"):
+            line += f"  ⭐ {b['avg_rating']}/10"
+        if b.get("match_reason"):
+            line += f"  [{b['match_reason']}]"
+        lines.append(line)
+    return "\n".join(lines)
+
+
+# ============ 模块初始化（供 app.py 的 init_ai_module 调用） ============
+def init_ai_module():
+    """惰性初始化：打印一行日志，不做 heavy 操作。"""
+    logger.info("[AI] 模块初始化完成")
+
+
+# ============================================================
+#                    F L A S K   路由
+# ============================================================
+@ai_bp.route("/status", methods=["GET"])
+def status_endpoint():
+    result = {
+        "success": True,
+        "ollama": {
+            "available": _ollama_available(),
+            "model": _OLLAMA_CHAT_MODEL,
+        },
+        "library": {"total_books": 0, "total_ratings": 0},
+        "faiss": {"available": False, "index_size": 0, "model": None},
+        "version": "2.1.0",
+    }
+    try:
+        Book = _get_book_model()
+        Rating = _get_rating_model()
+        result["library"]["total_books"] = int(Book.query.count())
+        result["library"]["total_ratings"] = int(Rating.query.count())
+    except Exception:
+        pass
     try:
         from services.embedding_service import get_embedding_service
         svc = get_embedding_service()
         if svc is not None:
-            details = {
-                'model_loaded': getattr(svc, 'model', None) is not None,
-                'faiss_ready': bool(getattr(svc, 'faiss_ready', False)),
-                'faiss_index_size': int(getattr(svc, 'index_size', 0) or 0),
-                'embedding_cache_size': int(len(getattr(svc, 'book_embeddings', {}) or {})),
-            }
-            status['faiss']['details'] = details
-            status['faiss']['available'] = bool(details['model_loaded']) and bool(details['faiss_ready'])
-    except Exception as e:
-        status['faiss']['error'] = str(e)
+            result["faiss"]["available"] = bool(getattr(svc, "faiss_ready", False))
+            result["faiss"]["index_size"] = int(getattr(svc, "index_size", 0) or 0)
+            if getattr(svc, "use_ollama", None):
+                result["faiss"]["model"] = "ollama-embedding"
+            elif getattr(svc, "use_sentence_transformers", None):
+                result["faiss"]["model"] = "sentence-transformers"
+            else:
+                result["faiss"]["model"] = "tf-idf"
+    except Exception:
+        pass
+    return jsonify(result)
 
-    # Recommend 状态
+
+@ai_bp.route("/chat", methods=["POST"])
+def chat_endpoint():
+    data = request.get_json() or {}
+    message = (data.get("message") or "").strip()
+    if not message:
+        return jsonify({"success": False, "error": "message 必填"}), 400
+    result = _rag_chat(message)
+    # 兼容可能旧前端期望的字段名
+    return jsonify(result)
+
+
+@ai_bp.route("/chat/stream", methods=["POST"])
+def chat_stream_endpoint():
+    data = request.get_json() or {}
+    message = (data.get("message") or "").strip()
+    if not message:
+        return jsonify({"success": False, "error": "message 必填"}), 400
+
+    rag_result = _rag_chat(message)
+    reply_text = rag_result.get("reply") or ""
+    books_meta = rag_result.get("books") or []
+
+    def _emit_chunk(chunk: str):
+        return (
+            f"data: {json.dumps({'type': 'chunk', 'text': chunk}, ensure_ascii=False)}\n\n"
+        ).encode("utf-8")
+
+    def _emit_meta(kind: str, payload: Dict):
+        return (
+            f"data: {json.dumps({'type': kind, 'data': payload}, ensure_ascii=False)}\n\n"
+        ).encode("utf-8")
+
+    def _generator():
+        yield _emit_meta("status", {
+            "intent": rag_result.get("intent"),
+            "books": books_meta,
+            "retrieved_count": rag_result.get("retrieved_count", 0),
+        })
+
+        if _ollama_available():
+            # 真实流式：把 Ollama 的 chunks 透传
+            try:
+                import requests
+                system, prompt = _build_prompt_for_recommend(message, books_meta) \
+                    if books_meta else (None, message)
+                payload = {
+                    "model": _OLLAMA_CHAT_MODEL,
+                    "prompt": prompt,
+                    "stream": True,
+                    "options": {"temperature": 0.7, "num_ctx": 2048},
+                }
+                if system:
+                    payload["system"] = system
+                r = requests.post(f"{_OLLAMA_HOST}/api/generate", json=payload,
+                                  stream=True, timeout=_OLLAMA_TIMEOUT)
+                for line in r.iter_lines():
+                    if not line:
+                        continue
+                    try:
+                        obj = json.loads(line.decode("utf-8"))
+                        chunk = obj.get("response") or ""
+                        if chunk:
+                            yield _emit_chunk(chunk)
+                        if obj.get("done"):
+                            break
+                    except Exception:
+                        continue
+                yield _emit_meta("done", {})
+                return
+            except Exception as e:
+                logger.warning(f"流式 LLM 失败: {e}")
+
+        # 无 LLM -> 用打字机效果模拟
+        for i in range(0, len(reply_text), 2):
+            yield _emit_chunk(reply_text[i:i + 2])
+            time.sleep(0.02)
+        yield _emit_meta("done", {})
+
+    return Response(_generator(), mimetype="text/event-stream")
+
+
+@ai_bp.route("/search", methods=["GET"])
+def search_endpoint():
+    q = (request.args.get("q") or "").strip()
+    if not q:
+        return jsonify({"success": False, "error": "q 必填"}), 400
+    try:
+        limit = max(1, min(50, int(request.args.get("limit", SEARCH_TOP_K))))
+    except Exception:
+        limit = SEARCH_TOP_K
+
+    books = _semantic_search(q, top_k=limit)
+    return jsonify({
+        "success": True,
+        "query": q,
+        "books": books,
+        "count": len(books),
+    })
+
+
+@ai_bp.route("/ask/<int:book_id>", methods=["GET", "POST"])
+def ask_book_endpoint(book_id: int):
+    book = _get_book_by_id(book_id)
+    if not book:
+        return jsonify({"success": False, "error": f"未找到书籍 ID={book_id}"}), 404
+
+    query = ""
+    if request.method == "POST":
+        query = ((request.get_json() or {}).get("query") or "").strip()
+    else:
+        query = (request.args.get("q") or "").strip() or "请简单介绍这本书"
+
+    system, prompt = _build_prompt_for_detail(query, book)
+    answer = ""
+    if _ollama_available():
+        answer = _ollama_generate(prompt, system=system, temperature=0.7)
+    if not answer:
+        answer = _template_reply("detail", query, [book])
+
+    return jsonify({
+        "success": True,
+        "book": book,
+        "answer": answer,
+        "query": query,
+    })
+
+
+@ai_bp.route("/recommend/<int:user_id>", methods=["GET", "POST"])
+def recommend_user_endpoint(user_id: int):
+    t0 = time.time()
+    strategy = "hybrid"
+    candidates: List[Dict] = []
+
+    # 1) 协同过滤（若可用）
     try:
         from services.cf_algorithm import CollaborativeFiltering
-        from services.svd_algorithm import SVDRecommendation
-        from services.content_filter import (
-            get_content_recommender, get_item_based_cf,
-        )
-
-        cf_engine = CollaborativeFiltering()
-        svd_engine = SVDRecommendation()
-        content_engine = get_content_recommender()
-        ibcf = get_item_based_cf()
-
-        details = {
-            'cf_users': int(getattr(cf_engine, 'user_count', 0) or 0),
-            'svd_items': int(getattr(svd_engine, 'book_count', 0) or 0),
-            'content_engine_ready': content_engine is not None,
-            'item_based_cf_ready': ibcf is not None,
-        }
-        status['recommend']['details'] = details
-        status['recommend']['available'] = (
-            details['cf_users'] > 0 or details['svd_items'] > 0
-            or details['content_engine_ready']
-        )
-    except Exception as e:
-        status['recommend']['error'] = str(e)
-
-    return jsonify(status), 200
-
-
-# ========== 修改现有 /chat/stream：识别推荐意图并注入推荐内容 ==========
-def _patched_ai_chat_stream():
-    """流式对话：检测到推荐意图时先跑推荐，再让 LLM 基于推荐结果回复"""
-    data = request.get_json() or {}
-    prompt = (data.get('prompt') or data.get('message') or '').strip()
-    user_id = data.get('user_id')
-    conversation_id = data.get('conversation_id') or f'conv_{int(time.time() * 1000)}'
-
-    def _emit(event_data: str) -> bytes:
-        return f'data: {event_data}\n\n'.encode('utf-8')
-
-    def _generate():
-        try:
-            yield _emit('[START]')
-        except Exception:
-            return
-
-        if not prompt:
-            yield _emit('[ERROR] prompt 不能为空')
-            return
-
-        # 推荐意图：先获取推荐结果，再让 LLM 基于推荐回复
-        enhanced_prompt = prompt
-        recommendations = []
-        is_intent = _is_recommend_intent(prompt)
-        if is_intent:
-            try:
-                recommendations, _ = _run_recommend(user_id, 5)
-            except Exception:
-                recommendations = []
-            if recommendations:
-                items_text = []
-                for idx, r in enumerate(recommendations[:10], start=1):
-                    title = r.get('title') or f'Book #{r.get("book_id", idx)}'
-                    author = r.get('author') or ''
-                    reason = r.get('reason') or 'recommended for you'
-                    score = r.get('score') or 0.7
-                    try:
-                        rating = round(float(score) * 5, 1) if float(score) <= 1 else round(float(score), 1)
-                    except Exception:
-                        rating = 4.0
-                    items_text.append(
-                        f"{idx}. 《{title}》{' by ' + author if author else ''}\n"
-                        f"   理由: {reason}\n"
-                        f"   匹配评分: {rating}/5.0"
-                    )
-                enhanced_prompt = (
-                    f"用户请求：「{prompt[:200]}」（这是一个找书/推荐请求）\n\n"
-                    f"推荐系统已为用户 #{user_id if user_id else 'guest'} 返回以下书籍：\n"
-                    f"{chr(10).join(items_text)}\n\n"
-                    f"请你作为友好的书店导购，基于上述推荐结果，用自然中文回复用户：\n"
-                    f"1) 先礼貌回应用户；\n"
-                    f"2) 列出每本书的书名、推荐理由与评分（保留原始推荐信息）；\n"
-                    f"3) 最后给一句鼓励性结束语。\n"
-                    f"直接输出对话文本。"
-                )
-                # 先把"识别到推荐意图"作为首块文本输出
-                try:
-                    yield _emit('好的，我来为你挑选几本书——\n\n')
-                except Exception:
-                    pass
-
-        # ---------- 原始流式生成逻辑 ----------
-        try:
-            from .llm_engine import get_llm_engine
-            engine = get_llm_engine()
-
-            engine_ok = False
-            try:
-                if engine and hasattr(engine, 'ollama_available') and engine.ollama_available and hasattr(engine, 'generate_stream'):
-                    engine_ok = True
-            except Exception:
-                engine_ok = False
-
-            collected_chunks = []
-
-            if engine_ok:
-                try:
-                    def _on_token(token: str):
-                        collected_chunks.append(token)
-                    llm_resp = engine.generate_stream(enhanced_prompt, callback=_on_token)
-                    full_text = getattr(llm_resp, 'content', '') or ''.join(collected_chunks)
-                    if not full_text and collected_chunks:
-                        full_text = ''.join(collected_chunks)
-
-                    chunk_size = random.randint(3, 8)
-                    pos = 0
-                    while pos < len(full_text):
-                        piece = full_text[pos:pos + chunk_size]
-                        yield _emit(piece)
-                        pos += chunk_size
-                        chunk_size = random.randint(3, 8)
-                        time.sleep(0.02)
-                except Exception as e:
-                    yield _emit(f'[ERROR] LLM 流式调用失败: {e}')
-                    return
-            else:
-                try:
-                    llm_resp = engine.generate(enhanced_prompt) if engine else None
-                    full_text = getattr(llm_resp, 'content', '') if llm_resp else ''
-                    if not full_text:
-                        if is_intent and recommendations:
-                            # 基于推荐结果的模板化流式输出
-                            parts = ['根据你的需求，我为你精选了以下几本书：\n\n']
-                            for idx, r in enumerate(recommendations[:10], start=1):
-                                title = r.get('title') or f'Book #{r.get("book_id", idx)}'
-                                reason = r.get('reason') or 'recommended for you'
-                                try:
-                                    rating = round(float(r.get('score') or 0.7) * 5, 1)
-                                except Exception:
-                                    rating = 4.0
-                                parts.append(f"{idx}. 《{title}》\n   理由: {reason}\n   评分: {rating}/5.0\n\n")
-                            parts.append('希望其中有你喜欢的一本，祝你阅读愉快！')
-                            full_text = ''.join(parts)
-                        else:
-                            full_text = (
-                                f"你好！我收到了你的问题：「{prompt[:80]}」。\n"
-                                f"作为书籍 AI 助手，我可以帮你生成个性化书评、"
-                                f"推荐匹配的书籍、分析书籍内容与主题，以及生成你的阅读报告。\n"
-                                f"\n你可以进一步告诉我，你希望从哪个角度入手？"
+        cf = CollaborativeFiltering()
+        if cf and getattr(cf, "user_count", 0) > 0:
+            recs = getattr(cf, "recommend", None)
+            if recs:
+                raw = recs(user_id, n_recommendations=15)
+                seen = set()
+                for r in raw:
+                    bid = int(r.get("book_id") or r.get("id") or 0)
+                    if bid and bid not in seen:
+                        detail = _get_book_by_id(bid)
+                        if detail:
+                            detail["recommend_score"] = round(
+                                float(r.get("score") or 0), 3
                             )
-                    chunk_size = random.randint(3, 8)
-                    pos = 0
-                    while pos < len(full_text):
-                        piece = full_text[pos:pos + chunk_size]
-                        yield _emit(piece)
-                        pos += chunk_size
-                        chunk_size = random.randint(3, 8)
-                        time.sleep(0.02)
-                except Exception as e:
-                    yield _emit(f'[ERROR] LLM 调用失败: {e}')
-                    return
-        except Exception as e:
-            yield _emit(f'[ERROR] 生成失败: {e}')
-            return
-
-        yield _emit('[DONE]')
-
-    try:
-        return Response(_generate(), mimetype='text/event-stream')
+                            candidates.append(detail)
+                            seen.add(bid)
     except Exception as e:
-        return Response(f'data: [ERROR] 初始化失败: {e}\n\n', mimetype='text/event-stream')
+        logger.info(f"协同过滤不可用: {e}")
 
+    # 2) 用热门 + 语义搜索兜底
+    if len(candidates) < 6:
+        popular = _search_popular(top_k=10)
+        for p in popular:
+            if not any(c["book_id"] == p["book_id"] for c in candidates):
+                p["recommend_score"] = 0.5
+                candidates.append(p)
+    if len(candidates) < 6:
+        strategy = "popular_fallback"
 
-# ========== 修改现有 /chat：识别推荐意图并注入推荐内容 ==========
-def _patched_ai_chat():
-    """对话：检测到推荐意图时先跑推荐，再让 LLM 基于推荐结果回复"""
-    data = request.get_json() or {}
-    message = (data.get('message') or data.get('prompt') or '').strip()
-    conversation_id = data.get('conversation_id') or f'conv_{int(time.time() * 1000)}'
-    user_id = data.get('user_id')
-
-    if not message:
-        return {'success': False, 'error': '消息不能为空'}, 400
-
-    is_intent = _is_recommend_intent(message)
-    recommendations = []
-
-    # 推荐意图：先内部调用推荐，再交给 LLM 基于结果生成回复
-    if is_intent:
+    # 3) 生成推荐理由
+    final_list = candidates[:RECOMMEND_TOP_K]
+    llm_summary = ""
+    if final_list and _ollama_available():
         try:
-            recommendations, _ = _run_recommend(user_id, 5)
+            lines = [f"{i+1}. 《{b['title']}》 by {b.get('author','')} [{b.get('category','')}]"
+                     for i, b in enumerate(final_list[:5])]
+            sys_p = "你是一位有品味的书店导购，用简洁的中文总结推荐理由，100 字以内。"
+            user_p = f"为用户 #{user_id} 推荐书籍：\n{chr(10).join(lines)}\n请用 2-3 句话总结。"
+            llm_summary = _ollama_generate(user_p, system=sys_p, temperature=0.6)
         except Exception:
-            recommendations = []
+            pass
+    if not llm_summary:
+        llm_summary = (
+            f"根据图书馆数据，为你挑选了 {len(final_list)} 本高评分、高人气的书籍，"
+            f"覆盖多个不同主题，希望你能喜欢。"
+        )
 
-        # 让 LLM 基于推荐结果回复
-        try:
-            from .llm_engine import get_llm_engine
-            engine = get_llm_engine()
-            items_text = []
-            if recommendations:
-                for idx, r in enumerate(recommendations[:10], start=1):
-                    title = r.get('title') or f'Book #{r.get("book_id", idx)}'
-                    author = r.get('author') or ''
-                    reason = r.get('reason') or 'recommended for you'
-                    try:
-                        score_f = float(r.get('score') or 0.7)
-                        rating = round(score_f * 5, 1) if score_f <= 1 else round(score_f, 1)
-                    except Exception:
-                        rating = 4.0
-                    items_text.append(
-                        f"{idx}. 《{title}》{' by ' + author if author else ''}\n"
-                        f"   理由: {reason}\n"
-                        f"   匹配评分: {rating}/5.0"
-                    )
-            prompt = (
-                f"用户请求：「{message[:200]}」（这是一个找书/推荐请求）\n\n"
-                f"推荐系统已为用户 #{user_id if user_id else 'guest'} 返回以下书籍：\n"
-                f"{chr(10).join(items_text) if items_text else '(暂无推荐结果，请稍后再试)'}\n\n"
-                f"请你作为友好的书店导购，基于上述推荐结果用自然中文回复用户。"
-            ) if recommendations else (
-                f"用户说：「{message[:200]}」。请作为友好的书店导购回复用户，"
-                f"告知暂时没有可用的个性化推荐，但可以基于热门书籍做推荐，或请用户补充阅读偏好。"
-            )
+    return jsonify({
+        "success": True,
+        "user_id": user_id,
+        "strategy": strategy,
+        "recommendations": final_list,
+        "recommendation_summary": llm_summary,
+        "count": len(final_list),
+        "elapsed_ms": int((time.time() - t0) * 1000),
+    })
 
-            try:
-                resp = engine.generate(prompt) if engine else None
-                reply_text = getattr(resp, 'content', None)
-                if not reply_text:
-                    # 模板化兜底
-                    lines = ['你好！根据你的需求，我为你精选了以下几本书：\n']
-                    for idx, r in enumerate(recommendations[:10], start=1):
-                        title = r.get('title') or f'Book #{r.get("book_id", idx)}'
-                        reason = r.get('reason') or 'recommended for you'
-                        try:
-                            rating = round(float(r.get('score') or 0.7) * 5, 1)
-                        except Exception:
-                            rating = 4.0
-                        lines.append(f"{idx}. 《{title}》\n   理由: {reason}\n   评分: {rating}/5.0\n")
-                    lines.append('希望其中有你喜欢的一本，祝你阅读愉快！')
-                    reply_text = '\n'.join(lines)
-                return {
-                    'success': True,
-                    'reply': str(reply_text).strip(),
-                    'message': message,
-                    'conversation_id': conversation_id,
-                    'is_recommend_intent': True,
-                    'recommendations': recommendations,
-                }
-            except Exception as e:
-                # LLM 失败：模板化回复 + 保留推荐结果
-                lines = ['你好！根据你的需求，我为你精选了以下几本书：\n']
-                for idx, r in enumerate(recommendations[:10], start=1):
-                    title = r.get('title') or f'Book #{r.get("book_id", idx)}'
-                    reason = r.get('reason') or 'recommended for you'
-                    try:
-                        rating = round(float(r.get('score') or 0.7) * 5, 1)
-                    except Exception:
-                        rating = 4.0
-                    lines.append(f"{idx}. 《{title}》\n   理由: {reason}\n   评分: {rating}/5.0\n")
-                lines.append(f'(LLM 暂时不可用: {e}) 希望其中有你喜欢的一本，祝你阅读愉快！')
-                return {
-                    'success': True,
-                    'reply': '\n'.join(lines),
-                    'message': message,
-                    'conversation_id': conversation_id,
-                    'is_recommend_intent': True,
-                    'recommendations': recommendations,
-                }
-        except Exception as e:
-            return {'success': False, 'error': f'对话处理失败: {str(e)}'}, 500
 
-    # 非推荐意图：走原有逻辑（conversation_manager / 或 LLM 直接回复）
+@ai_bp.route("/popular", methods=["GET"])
+def popular_endpoint():
     try:
-        from .conversation import get_conversation_manager
-        conv_manager = get_conversation_manager()
-        result = conv_manager.handle_message(conversation_id, message, user_id)
-        result['conversation_id'] = conversation_id
-        result['is_recommend_intent'] = False
-        result['recommendations'] = []
-        return {'success': True, **result}
+        limit = max(1, min(30, int(request.args.get("limit", "10"))))
     except Exception:
-        # conversation_manager 也不可用：直接让 LLM 回复
+        limit = 10
+    books = _search_popular(top_k=limit)
+    return jsonify({"success": True, "books": books, "count": len(books)})
+
+
+@ai_bp.route("/health", methods=["GET"])
+def health_endpoint():
+    return jsonify({
+        "success": True,
+        "ollama": _ollama_available(),
+        "service": "ai-assistant",
+        "version": "2.1.0",
+    })
+
+
+# ============ 命令行调试 ============
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
+    print(f"[i] Ollama 可用: {_ollama_available()}")
+    print(f"[i] 模型: {_OLLAMA_CHAT_MODEL}")
+    print("\n交互式对话，输入 exit 退出")
+    while True:
         try:
-            from .llm_engine import get_llm_engine
-            engine = get_llm_engine()
-            resp = engine.generate(message) if engine else None
-            text = getattr(resp, 'content', None) or (
-                f'你好，我收到了你的消息：「{message[:80]}」。'
-                f'如果你想让我为你推荐书籍，请告诉我你的阅读偏好，'
-                f'或直接包含"推荐"、"找书"等关键词。'
-            )
-            return {
-                'success': True,
-                'reply': str(text),
-                'message': message,
-                'conversation_id': conversation_id,
-                'is_recommend_intent': False,
-                'recommendations': [],
-            }
-        except Exception as e:
-            return {'success': False, 'error': f'对话处理失败: {str(e)}'}, 500
-
-
-# 将 /chat/stream 与 /chat 切换为增强版路由（在 blueprint 中覆盖）
-ai_bp.add_url_rule('/chat/stream', 'ai_chat_stream_enhanced', _patched_ai_chat_stream, methods=['POST'])
-ai_bp.add_url_rule('/chat', 'ai_chat_enhanced', _patched_ai_chat, methods=['POST'])
-
-
-# ========== 模块初始化 ==========
-def init_ai_module():
-    """初始化 AI 模块（预热引擎等）"""
-    try:
-        from .llm_engine import get_llm_engine
-        from .conversation import get_conversation_manager
-        from .review_generator import get_review_generator
-        from .knowledge_graph import get_knowledge_graph_generator
-        from .report_generator import get_report_generator
-
-        _ = get_llm_engine()
-        _ = get_conversation_manager()
-        _ = get_review_generator()
-        _ = get_knowledge_graph_generator()
-        _ = get_report_generator()
-
-        print("[AI] 模块初始化完成 ✓")
-        return True
-    except Exception as e:
-        print(f"[AI] 模块初始化警告: {e}")
-        return False
-
-
-__all__ = ['ai_bp', 'init_ai_module']
+            q = input("你> ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print()
+            break
+        if q.lower() in ("exit", "quit", ""):
+            break
+        # 必须在 app context 里运行（要查数据库）
+        from app import create_app as _create
+        _app = _create()
+        with _app.app_context():
+            r = _rag_chat(q)
+        print(f"AI ({r.get('intent')})> {r.get('reply')}")
+        for b in r.get("books") or []:
+            print(f"   · 《{b.get('title','')}》 by {b.get('author','')} "
+                  f"[评分 {b.get('avg_rating', 0)}]")
+        print(f"   检索命中: {r.get('retrieved_count', 0)} 本, "
+              f"耗时 {r.get('elapsed_ms', 0)} ms")

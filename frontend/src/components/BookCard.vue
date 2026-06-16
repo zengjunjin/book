@@ -28,7 +28,8 @@
           disabled
           size="small"
           :show-score="false"
-          text-color="#f97316"
+          text-color="#22d3ee"
+          :colors="['#6366f1', '#818cf8', '#22d3ee']"
         />
         <span class="rating-value">{{ (Number(book.avg_rating) || 0).toFixed(1) }}</span>
       </div>
@@ -38,7 +39,8 @@
           :max="10"
           size="small"
           @change="handleQuickRate"
-          text-color="#f97316"
+          text-color="#22d3ee"
+          :colors="['#6366f1', '#818cf8', '#22d3ee']"
           allow-half
         />
       </div>
@@ -141,9 +143,9 @@ const handleQuickRate = async (val) => {
 }
 
 .book-card:hover {
-  border-color: #f97316 !important;
+  border-color: #6366f1 !important;
   transform: translateY(-8px) scale(1.02);
-  box-shadow: 0 12px 40px rgba(249, 115, 22, 0.2), 0 4px 12px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 12px 40px rgba(99, 102, 241, 0.25), 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 
 .book-card:active {
@@ -191,9 +193,9 @@ const handleQuickRate = async (val) => {
   bottom: 0;
   background: linear-gradient(
     180deg,
-    rgba(249, 115, 22, 0) 0%,
-    rgba(249, 115, 22, 0.1) 50%,
-    rgba(249, 115, 22, 0.2) 100%
+    rgba(99, 102, 241, 0) 0%,
+    rgba(99, 102, 241, 0.1) 50%,
+    rgba(99, 102, 241, 0.2) 100%
   );
   opacity: 0;
   transition: opacity 0.3s ease;
@@ -207,14 +209,15 @@ const handleQuickRate = async (val) => {
 }
 
 .view-detail {
-  background: rgba(249, 115, 22, 0.9);
+  background: linear-gradient(135deg, #6366f1, #22d3ee);
   color: white;
   padding: 8px 16px;
   border-radius: 20px;
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
   transform: translateY(10px);
   transition: transform 0.3s ease;
+  box-shadow: 0 4px 14px rgba(99, 102, 241, 0.4);
 }
 
 .book-card:hover .view-detail {
@@ -225,7 +228,7 @@ const handleQuickRate = async (val) => {
   position: absolute;
   top: 12px;
   right: 12px;
-  background: linear-gradient(135deg, #f97316 0%, #fb923c 100%);
+  background: linear-gradient(135deg, #6366f1 0%, #22d3ee 100%);
   color: #fff;
   padding: 4px 10px;
   border-radius: 6px;
@@ -235,26 +238,26 @@ const handleQuickRate = async (val) => {
   align-items: center;
   gap: 4px;
   z-index: 2;
-  box-shadow: 0 2px 8px rgba(249, 115, 22, 0.4);
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.4);
   animation: badgePulse 2s ease-in-out infinite;
 }
 
 @keyframes badgePulse {
-  0%, 100% { box-shadow: 0 2px 8px rgba(249, 115, 22, 0.4); }
-  50% { box-shadow: 0 2px 16px rgba(249, 115, 22, 0.6); }
+  0%, 100% { box-shadow: 0 2px 8px rgba(99, 102, 241, 0.4); }
+  50% { box-shadow: 0 2px 16px rgba(99, 102, 241, 0.6); }
 }
 
 .reason-tag {
   position: absolute;
   bottom: 12px;
   left: 12px;
-  background-color: rgba(26, 26, 47, 0.95);
-  color: #f97316;
+  background-color: rgba(15, 15, 25, 0.95);
+  color: #6366f1;
   padding: 4px 10px;
   border-radius: 6px;
   font-size: 11px;
   font-weight: 500;
-  border: 1px solid rgba(249, 115, 22, 0.3);
+  border: 1px solid rgba(99, 102, 241, 0.3);
   opacity: 0;
   transform: translateY(5px);
   transition: all 0.3s ease;
@@ -266,13 +269,14 @@ const handleQuickRate = async (val) => {
 }
 
 .reason-strong {
-  border-color: rgba(249, 115, 22, 0.6);
-  background: linear-gradient(135deg, rgba(249, 115, 22, 0.2) 0%, rgba(26, 26, 47, 0.95) 100%);
+  border-color: rgba(99, 102, 241, 0.6);
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.2) 0%, rgba(15, 15, 25, 0.95) 100%);
+  color: #22d3ee;
 }
 
 .reason-good {
   border-color: rgba(34, 197, 94, 0.5);
-  color: #22c55e;
+  color: #34d399;
 }
 
 .reason-maybe {
@@ -281,8 +285,8 @@ const handleQuickRate = async (val) => {
 }
 
 .reason-default {
-  border-color: rgba(249, 115, 22, 0.3);
-  color: #f97316;
+  border-color: rgba(99, 102, 241, 0.3);
+  color: #6366f1;
 }
 
 .book-info {
@@ -294,7 +298,7 @@ const handleQuickRate = async (val) => {
 }
 
 .book-card:hover .book-info {
-  background: linear-gradient(180deg, #1f1f28 0%, #18181f 100%);
+  background: rgba(99, 102, 241, 0.03);
 }
 
 .book-info .title {
@@ -314,14 +318,14 @@ const handleQuickRate = async (val) => {
 
 /* 搜索高亮样式 */
 :deep(.search-highlight) {
-  background-color: rgba(249, 115, 22, 0.3);
-  color: #f97316;
+  background-color: rgba(99, 102, 241, 0.25);
+  color: #818cf8;
   padding: 0 2px;
   border-radius: 2px;
 }
 
 .book-card:hover .book-info .title {
-  color: #f97316;
+  color: #818cf8;
 }
 
 .book-info .author {
@@ -364,7 +368,7 @@ const handleQuickRate = async (val) => {
 }
 
 .rating-value {
-  color: #f97316;
+  color: #22d3ee;
   font-weight: 600;
   font-size: 13px;
 }
@@ -375,7 +379,14 @@ const handleQuickRate = async (val) => {
 
 :deep(.el-rate) {
   --el-rate-icon-color: #2a2a35;
+  --el-rate-void-color: #2a2a35;
+  --el-rate-disabled-void-color: #2a2a35;
+  --el-rate-fill-color: #6366f1;
   gap: 2px;
+}
+
+:deep(.el-rate__icon.hover) {
+  transform: scale(1.1);
 }
 
 .quick-rate {

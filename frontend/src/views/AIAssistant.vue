@@ -1,1931 +1,931 @@
-<!--
-  🤖 AI 内容创作助手 - 前端界面
-  整合：对话、书评、推荐、知识图谱、阅读报告
--->
-
 <template>
-  <div class="ai-assistant">
-    <!-- 顶部工具栏 -->
-    <div class="ai-toolbar">
-      <div class="toolbar-left">
-        <h1>
-          <span class="emoji">🤖</span>
-          AI 书籍助手
-        </h1>
-        <span class="subtitle">你的智能阅读伙伴</span>
-      </div>
-      <div class="toolbar-right">
-        <span class="status-badge" :class="statusMode">
-          <span class="dot"></span>
-          {{ statusMode === 'llm' ? 'AI 在线' : '智能模式' }}
-        </span>
-      </div>
+  <div class="ai-app">
+    <!-- 动态背景光晕 -->
+    <div class="bg-orbs">
+      <div class="orb orb-1"></div>
+      <div class="orb orb-2"></div>
+      <div class="orb orb-3"></div>
     </div>
+    <div class="bg-noise"></div>
 
-    <!-- 功能切换 Tab -->
-    <div class="feature-tabs" :class="{ 'tabs-animating': isTabSwitching }">
-      <button
-        v-for="(tab, index) in featureTabs"
-        :key="tab.id"
-        class="tab-btn"
-        :class="{ active: activeTab === tab.id }"
-        :style="{ animationDelay: `${index * 50}ms` }"
-        @click="switchTab(tab.id)"
-      >
-        <span class="tab-emoji">{{ tab.emoji }}</span>
-        <span class="tab-name">{{ tab.name }}</span>
-      </button>
-    </div>
-
-    <!-- 搜索栏 -->
-    <div v-if="activeTab === 'chat'" class="search-bar">
-      <input
-        v-model="searchQuery"
-        type="text"
-        placeholder="搜索书籍..."
-        class="search-input"
-        @keyup.enter="searchBooks"
-      />
-      <button class="search-btn" @click="searchBooks">🔍</button>
-    </div>
-
-    <!-- 搜索结果 -->
-    <div v-if="searchResults.length > 0" class="search-results">
-      <div
-        v-for="book in searchResults"
-        :key="book.id"
-        class="search-result-item"
-        @click="selectBook(book)"
-      >
-        <span class="book-title">《{{ book.title }}》</span>
-        <span class="book-author">{{ book.author }}</span>
-      </div>
-    </div>
-
-    <!-- 聊天对话界面 -->
-    <div v-if="activeTab === 'chat'" class="chat-panel">
-      <!-- 消息区 -->
-      <div class="chat-messages" ref="messagesContainer">
-        <!-- 欢迎消息 -->
-        <div class="message ai-message welcome-message" v-if="messages.length === 0">
-          <div class="msg-avatar">🤖</div>
-          <div class="msg-content">
-            <div class="msg-header">AI 助手</div>
-            <div class="msg-text">
-              你好！我是你的书籍 AI 助手 📚
-              <br /><br />
-              我可以帮你：
-              <br />• 生成个性化书评
-              <br />• 推荐适合的书籍
-              <br />• 分析书籍主题和知识图谱
-              <br />• 生成你的阅读报告
-              <br /><br />
-              试试看，问我点什么吧！
-            </div>
+    <!-- 顶部栏 -->
+    <header class="ai-header">
+      <div class="header-left">
+        <div class="brand-logo" @click="clearChat">
+          <svg viewBox="0 0 32 32" class="logo-svg">
+            <defs>
+              <linearGradient id="lg1" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" style="stop-color:#a855f7"/>
+                <stop offset="50%" style="stop-color:#3b82f6"/>
+                <stop offset="100%" style="stop-color:#06b6d4"/>
+              </linearGradient>
+            </defs>
+            <rect x="4" y="4" width="24" height="24" rx="7" fill="url(#lg1)"/>
+            <circle cx="13" cy="14" r="2.5" fill="#fff"/>
+            <circle cx="19" cy="18" r="2.5" fill="#fff" opacity="0.7"/>
+            <path d="M10 22 Q16 16 22 22" stroke="#fff" stroke-width="2" fill="none" stroke-linecap="round" opacity="0.9"/>
+          </svg>
+        </div>
+        <div class="brand-text">
+          <div class="brand-title">Book AI</div>
+          <div class="brand-sub">
+            <span class="status-dot" :class="{online: ollamaOnline}"></span>
+            {{ ollamaOnline ? '已连接本地模型' : '智能模式' }}
+            · 全馆 {{ totalBooks.toLocaleString() }} 册可检索
           </div>
         </div>
+      </div>
 
-        <!-- 消息列表 -->
-        <div
-          v-for="(msg, index) in messages"
-          :key="index"
-          class="message"
-          :class="[
-            msg.role === 'user' ? 'user-message' : 'ai-message',
-            msg.isTyping ? 'typing-message' : '',
-            'slide-in-' + (index % 2 === 0 ? 'left' : 'right')
-          ]"
-        >
-          <div class="msg-avatar">{{ msg.role === 'user' ? '👤' : '🤖' }}</div>
-          <div class="msg-content">
-            <div class="msg-header">
-              {{ msg.role === 'user' ? '你' : 'AI 助手' }}
-              <span class="msg-time">{{ msg.time }}</span>
-            </div>
-            <!-- 打字机效果显示AI回复 -->
-            <div class="msg-text" v-if="msg.role === 'assistant'">
-              <span v-if="!msg.isTyping" v-html="formatMessage(msg.content)"></span>
-              <span v-else class="typing-cursor">{{ displayedTexts[index] || '' }}</span>
-            </div>
-            <div class="msg-text" v-else v-html="formatMessage(msg.content)"></div>
+      <div class="header-right">
+        <button class="chip-btn" @click="clearChat" title="清空对话">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+          <span>新对话</span>
+        </button>
+        <button class="chip-btn ghost" @click="goHome" title="返回">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+        </button>
+      </div>
+    </header>
 
-            <!-- 推荐操作 -->
-            <div v-if="msg.suggestedActions && !msg.isTyping" class="suggested-actions">
-              <button
-                v-for="action in msg.suggestedActions"
-                :key="action.text"
-                class="suggestion-btn"
-                @click="sendMessage(action.text)"
-              >
-                <span>{{ action.icon }} {{ action.text }}</span>
-              </button>
+    <!-- 对话主内容 -->
+    <main class="chat-main" ref="chatScrollRef">
+      <!-- 欢迎页 -->
+      <div v-if="messages.length === 0" class="welcome-wrap">
+        <div class="welcome-card">
+          <div class="welcome-hero">
+            <div class="hero-icon">
+              <svg viewBox="0 0 48 48" width="48" height="48">
+                <defs>
+                  <linearGradient id="hero-g" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" style="stop-color:#a855f7"/>
+                    <stop offset="100%" style="stop-color:#06b6d4"/>
+                  </linearGradient>
+                </defs>
+                <circle cx="24" cy="24" r="22" fill="url(#hero-g)" opacity="0.25"/>
+                <circle cx="24" cy="24" r="22" fill="none" stroke="url(#hero-g)" stroke-width="1.5" opacity="0.6"/>
+                <text x="24" y="31" text-anchor="middle" font-size="22" font-weight="700" fill="#fff">📚</text>
+              </svg>
             </div>
+            <h1>你好，让我帮你探索好书</h1>
+            <p class="hero-sub">输入书名查询详情 · 按主题推荐 · 找同类型作品</p>
           </div>
-        </div>
 
-        <!-- 加载指示器 -->
-        <div class="message ai-message loading" v-if="isLoading">
-          <div class="msg-avatar">🤖</div>
-          <div class="msg-content">
-            <div class="msg-header">AI 助手 <span class="typing">正在思考...</span></div>
-            <div class="loading-dots">
-              <span></span><span></span><span></span>
+          <!-- 推荐提示 -->
+          <div class="prompt-grid">
+            <button v-for="(p, i) in quickPrompts" :key="i" class="prompt-card"
+              :style="{animationDelay: (i * 60) + 'ms'}" @click="sendMessage(p.text)">
+              <span class="prompt-emoji">{{ p.icon }}</span>
+              <span class="prompt-text">{{ p.text }}</span>
+              <span class="prompt-arrow">→</span>
+            </button>
+          </div>
+
+          <!-- 热门书籍预览 -->
+          <div v-if="hotBooks.length" class="hot-row">
+            <div class="hot-row-header">
+              <span class="hot-title">🔥 热门高分</span>
+              <span class="hot-sub">来自 {{ totalBooks.toLocaleString() }} 册馆藏</span>
+            </div>
+            <div class="hot-book-row">
+              <div v-for="(b, i) in hotBooks" :key="(b.book_id || b.id) + '-' + i"
+                class="hot-book-card"
+                :style="{animationDelay: (180 + i * 70) + 'ms'}"
+                @click="sendMessage('介绍一下《' + b.title + '》')">
+                <div class="hbc-cover" :style="coverStyle(b)">
+                  <span class="hbc-letter">{{ bookLetter(b) }}</span>
+                </div>
+                <div class="hbc-info">
+                  <div class="hbc-title" :title="b.title">{{ b.title }}</div>
+                  <div class="hbc-author">{{ b.author || '未知作者' }}</div>
+                  <div class="hbc-rating">
+                    <svg viewBox="0 0 24 24" width="12" height="12" fill="#f59e0b"><path d="M12 2l3 7h7l-5.5 4.5L18 21l-6-4.5L6 21l1.5-7.5L2 9h7z"/></svg>
+                    <span>{{ (b.avg_rating || 0).toFixed(1) }}</span>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
       </div>
 
-      <!-- 快捷操作 -->
-      <div class="quick-actions">
-        <button class="quick-btn" @click="quickAction('review')">📝 写书评</button>
-        <button class="quick-btn" @click="quickAction('recommend')">🎯 推荐书籍</button>
-        <button class="quick-btn" @click="quickAction('analyze')">🔍 分析书籍</button>
-        <button class="quick-btn" @click="quickAction('report')">📊 阅读报告</button>
-      </div>
-
-      <!-- 输入框 -->
-      <div class="chat-input-area">
-        <textarea
-          v-model="inputMessage"
-          placeholder="输入消息，或试试：给《三体》写一篇书评..."
-          class="chat-input"
-          rows="2"
-          @keydown.enter.exact.prevent="sendMessage()"
-          @keydown.enter.shift.exact="inputMessage += '\n'"
-        ></textarea>
-        <button
-          class="send-btn"
-          :disabled="isLoading || !inputMessage.trim()"
-          @click="sendMessage()"
-        >
-          <span>发送</span>
-          <span class="send-emoji">➤</span>
-        </button>
-      </div>
-    </div>
-
-    <!-- 书评生成面板 -->
-    <div v-if="activeTab === 'review'" class="review-panel panel-content">
-      <div class="panel-section">
-        <h3>📝 生成书评</h3>
-        <div class="input-group">
-          <label>书籍ID</label>
-          <input v-model="reviewBookId" type="number" placeholder="输入书籍 ID（例如 5）" />
-        </div>
-        <div class="input-group">
-          <label>书评风格</label>
-          <select v-model="reviewStyle">
-            <option value="personal">💭 个人读后感</option>
-            <option value="professional">📖 专业书评</option>
-            <option value="humorous">😄 幽默吐槽</option>
-            <option value="academic">🎓 学术分析</option>
-          </select>
-        </div>
-        <button class="primary-btn" :disabled="isGenerating" @click="generateReview">
-          <span v-if="!isGenerating">✨</span>
-          <span :class="{ 'btn-loading': isGenerating }">
-            {{ isGenerating ? '生成中...' : '生成书评' }}
-          </span>
-        </button>
-      </div>
-
-      <!-- 书评结果 -->
-      <div class="panel-section result-section" v-if="generatedReview">
-        <h3>{{ generatedReview.title }}</h3>
-        <div class="meta-info">
-          <span>📚 《{{ generatedReview.book_title }}》</span>
-          <span>✍️ {{ generatedReview.author }}</span>
-          <span>⭐ {{ generatedReview.rating }}/10</span>
-        </div>
-        <div class="tags">
-          <span v-for="tag in generatedReview.tags" :key="tag" class="tag">#{{ tag }}</span>
-        </div>
-        <div class="highlights">
-          <h4>🌟 亮点</h4>
-          <ul>
-            <li v-for="h in generatedReview.highlights" :key="h">{{ h }}</li>
-          </ul>
-        </div>
-        <div class="content" v-html="formatMessage(generatedReview.content)"></div>
-        <div class="target-readers">
-          <strong>🎯 适合读者：</strong> {{ generatedReview.target_readers }}
-        </div>
-        <div class="generation-info">
-          生成方式: {{ generatedReview.mode === 'llm' ? 'AI 生成' : '智能模板' }} ·
-          模型: {{ generatedReview.model }}
-        </div>
-      </div>
-    </div>
-
-    <!-- 知识图谱面板 -->
-    <div v-if="activeTab === 'knowledge'" class="knowledge-panel panel-content">
-      <div class="panel-section">
-        <h3>🧠 书籍知识图谱</h3>
-        <div class="input-group">
-          <label>书籍ID</label>
-          <input v-model="kgBookId" type="number" placeholder="输入书籍 ID" />
-        </div>
-        <button class="primary-btn" :disabled="isGenerating" @click="generateKnowledgeGraph">
-          <span v-if="!isGenerating">🔗</span>
-          <span :class="{ 'btn-loading': isGenerating }">
-            {{ isGenerating ? '分析中...' : '生成知识图谱' }}
-          </span>
-        </button>
-      </div>
-
-      <div class="panel-section result-section" v-if="knowledgeGraph">
-        <h3>《{{ knowledgeGraph.book_title }}》知识图谱</h3>
-        <p class="summary">{{ knowledgeGraph.summary }}</p>
-
-        <!-- 主题标签 -->
-        <div class="themes-section">
-          <h4>📌 核心主题</h4>
-          <div class="themes">
-            <span v-for="theme in knowledgeGraph.themes" :key="theme" class="theme-tag">
-              {{ theme }}
-            </span>
+      <!-- 消息列表 -->
+      <div v-else class="messages-wrap">
+        <TransitionGroup name="msg">
+          <div v-for="(msg, idx) in messages" :key="msg.id" class="msg-row" :class="msg.role">
+            <div class="msg-avatar" :class="msg.role">
+              <span v-if="msg.role === 'user'">{{ userInitial }}</span>
+              <svg v-else viewBox="0 0 24 24" width="18" height="18">
+                <defs>
+                  <linearGradient :id="'av' + idx" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" style="stop-color:#a855f7"/>
+                    <stop offset="100%" style="stop-color:#06b6d4"/>
+                  </linearGradient>
+                </defs>
+                <circle cx="12" cy="12" r="11" :fill="'url(#av' + idx + ')'" opacity="0.25"/>
+                <circle cx="12" cy="12" r="11" fill="none" :stroke="'url(#av' + idx + ')'" stroke-width="1.5" opacity="0.8"/>
+                <text x="12" y="16" text-anchor="middle" font-size="11">🤖</text>
+              </svg>
+            </div>
+            <div class="msg-body">
+              <div class="msg-meta">
+                <span class="msg-sender">{{ msg.role === 'user' ? '你' : 'Book AI' }}</span>
+                <span class="msg-time">{{ msg.time }}</span>
+                <span v-if="msg.intent" class="msg-intent">{{ intentLabel(msg.intent) }}</span>
+              </div>
+              <!-- 文本回复 -->
+              <div v-if="msg.text" class="msg-bubble" :class="{typing: msg.isTyping}">
+                <pre>{{ msg.text }}</pre>
+                <span v-if="msg.isTyping" class="caret"></span>
+              </div>
+              <!-- 错误 -->
+              <div v-if="msg.error" class="msg-error">
+                <span class="err-icon">⚠</span>
+                <span>{{ msg.error }}</span>
+              </div>
+              <!-- 书籍卡片 -->
+              <div v-if="msg.books && msg.books.length" class="books-grid">
+                <div v-for="(b, bi) in msg.books" :key="(b.book_id || b.id) + '-' + bi"
+                  class="book-card"
+                  :style="{animationDelay: (bi * 70) + 'ms'}"
+                  @click="openBook(b)">
+                  <div class="bc-cover" :style="coverStyle(b)">
+                    <span class="bc-letter">{{ bookLetter(b) }}</span>
+                    <div v-if="b.avg_rating" class="bc-rating">
+                      <svg viewBox="0 0 24 24" width="10" height="10" fill="#f59e0b"><path d="M12 2l3 7h7l-5.5 4.5L18 21l-6-4.5L6 21l1.5-7.5L2 9h7z"/></svg>
+                      {{ (b.avg_rating || 0).toFixed(1) }}
+                    </div>
+                  </div>
+                  <div class="bc-info">
+                    <div class="bc-title" :title="b.title">{{ b.title }}</div>
+                    <div class="bc-author">{{ b.author || '未知作者' }}</div>
+                    <div class="bc-meta">
+                      <span v-if="b.year">{{ b.year }}</span>
+                      <span v-if="b.rating_count" class="meta-dot">{{ b.rating_count }} 评价</span>
+                    </div>
+                    <div v-if="b.match_reason" class="bc-tag">{{ b.match_reason }}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
-        </div>
+        </TransitionGroup>
 
-        <!-- Mermaid 思维导图 -->
-        <div class="mermaid-container">
-          <h4>🗺️ 思维导图</h4>
-          <pre class="mermaid-code">{{ knowledgeGraphMermaid }}</pre>
-        </div>
-
-        <!-- 节点和边 -->
-        <div class="graph-stats">
-          <div class="stat-card">
-            <div class="stat-number">{{ knowledgeGraph.nodes.length }}</div>
-            <div class="stat-label">节点</div>
+        <!-- AI正在输入提示 -->
+        <div v-if="aiThinking" class="msg-row ai thinking">
+          <div class="msg-avatar ai">
+            <svg viewBox="0 0 24 24" width="18" height="18">
+              <circle cx="12" cy="12" r="11" fill="#a855f7" opacity="0.25"/>
+              <circle cx="12" cy="12" r="11" fill="none" stroke="#a855f7" stroke-width="1.5" opacity="0.8"/>
+              <text x="12" y="16" text-anchor="middle" font-size="11">🤖</text>
+            </svg>
           </div>
-          <div class="stat-card">
-            <div class="stat-number">{{ knowledgeGraph.edges.length }}</div>
-            <div class="stat-label">关系</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-number">{{ knowledgeGraph.tags.length }}</div>
-            <div class="stat-label">标签</div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- 阅读报告面板 -->
-    <div v-if="activeTab === 'report'" class="report-panel panel-content">
-      <div class="panel-section">
-        <h3>📊 我的阅读报告</h3>
-        <p class="hint">分析你的阅读数据，生成个性化报告</p>
-        <button class="primary-btn" :disabled="isGenerating" @click="generateReport">
-          <span v-if="!isGenerating">📈</span>
-          <span :class="{ 'btn-loading': isGenerating }">
-            {{ isGenerating ? '生成中...' : '生成阅读报告' }}
-          </span>
-        </button>
-      </div>
-
-      <div class="panel-section result-section" v-if="readingReport">
-        <h3>阅读报告</h3>
-        <p class="personality">{{ readingReport.personality_type }}</p>
-
-        <!-- 统计卡片 -->
-        <div class="stats-grid">
-          <div class="stat-card">
-            <div class="stat-number">{{ readingReport.stats.total_books }}</div>
-            <div class="stat-label">已读书籍</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-number">{{ readingReport.stats.avg_rating }}</div>
-            <div class="stat-label">平均评分</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-number">{{ readingReport.stats.highest_rating }}</div>
-            <div class="stat-label">最高评分</div>
-          </div>
-        </div>
-
-        <!-- 个性化洞察 -->
-        <div class="insights-section">
-          <h4>🔍 个性化洞察</h4>
-          <ul>
-            <li v-for="insight in readingReport.insights" :key="insight">{{ insight }}</li>
-          </ul>
-        </div>
-
-        <!-- 摘要 -->
-        <div class="report-summary">
-          <h4>📝 报告摘要</h4>
-          <div v-html="formatMessage(readingReport.summary)"></div>
-        </div>
-
-        <!-- 推荐书籍 -->
-        <div class="recommendations-section">
-          <h4>📚 为你推荐</h4>
-          <div class="recommendation-card" v-for="rec in readingReport.recommendations" :key="rec.title">
-            <div class="rec-title">《{{ rec.title }}》</div>
-            <div class="rec-author">{{ rec.author }}</div>
-            <div class="rec-reason">{{ rec.reason }}</div>
-            <div class="rec-score">匹配度: {{ rec.match_score }}%</div>
-          </div>
-        </div>
-
-        <div class="generation-info">
-          模型: {{ readingReport.model }}
-        </div>
-      </div>
-    </div>
-
-    <!-- 书籍摘要面板 -->
-    <div v-if="activeTab === 'summary'" class="summary-panel panel-content">
-      <div class="panel-section">
-        <h3>📖 书籍摘要</h3>
-        <div class="input-group">
-          <label>书籍ID</label>
-          <input v-model="summaryBookId" type="number" placeholder="输入书籍 ID" />
-        </div>
-        <button class="primary-btn" :disabled="isGenerating" @click="generateSummary">
-          <span v-if="!isGenerating">📝</span>
-          <span :class="{ 'btn-loading': isGenerating }">
-            {{ isGenerating ? '生成中...' : '生成摘要' }}
-          </span>
-        </button>
-      </div>
-
-      <div class="panel-section result-section" v-if="bookSummary">
-        <h3>《{{ bookSummary.title }}》</h3>
-        <p class="one-line">{{ bookSummary.one_line }}</p>
-
-        <div class="summary-section">
-          <h4>📋 概述</h4>
-          <p>{{ bookSummary.overview }}</p>
-        </div>
-
-        <div class="themes-section">
-          <h4>🎯 核心主题</h4>
-          <div class="tags">
-            <span v-for="theme in bookSummary.themes" :key="theme" class="tag">{{ theme }}</span>
-          </div>
-        </div>
-
-        <div class="summary-section">
-          <h4>⭐ 亮点</h4>
-          <ul>
-            <li v-for="(highlight, i) in bookSummary.highlights" :key="i">{{ highlight }}</li>
-          </ul>
-        </div>
-
-        <div class="target-section">
-          <h4>👥 目标读者</h4>
-          <p>{{ bookSummary.target_audience }}</p>
-        </div>
-
-        <div class="guide-section">
-          <h4>📖 阅读建议</h4>
-          <p>{{ bookSummary.reading_guide }}</p>
-        </div>
-
-        <div class="generation-info">
-          生成方式: {{ bookSummary.mode === 'llm' ? 'AI 生成' : '智能模板' }}
-        </div>
-      </div>
-    </div>
-
-    <!-- 完整分析面板 -->
-    <div v-if="activeTab === 'analyze'" class="analyze-panel panel-content">
-      <div class="panel-section">
-        <h3>🔍 完整书籍分析</h3>
-        <div class="input-group">
-          <label>书籍ID</label>
-          <input v-model="analyzeBookId" type="number" placeholder="输入书籍 ID" />
-        </div>
-        <button class="primary-btn" :disabled="isGenerating" @click="generateAnalysis">
-          <span v-if="!isGenerating">🔍</span>
-          <span :class="{ 'btn-loading': isGenerating }">
-            {{ isGenerating ? '分析中...' : '开始分析' }}
-          </span>
-        </button>
-      </div>
-
-      <div class="panel-section result-section" v-if="bookAnalysis">
-        <!-- 书籍画像 -->
-        <div v-if="bookAnalysis.profile" class="profile-section">
-          <h3>《{{ bookAnalysis.profile.title }}》</h3>
-          <div class="meta-info">
-            <span>✍️ {{ bookAnalysis.profile.author }}</span>
-            <span v-if="bookAnalysis.profile.publisher">{{ bookAnalysis.profile.publisher }}</span>
-            <span>⭐ {{ bookAnalysis.profile.avg_rating }}/10</span>
-            <span>👥 {{ bookAnalysis.profile.rating_count }}人评价</span>
-          </div>
-          <div class="tags">
-            <span v-for="tag in bookAnalysis.profile.tags" :key="tag" class="tag">#{{ tag }}</span>
-          </div>
-        </div>
-
-        <!-- 摘要 -->
-        <div v-if="bookAnalysis.summary" class="summary-section">
-          <h4>📖 摘要</h4>
-          <p class="one-line">{{ bookAnalysis.summary.one_line }}</p>
-          <p>{{ bookAnalysis.summary.overview }}</p>
-        </div>
-
-        <!-- 相似书籍 -->
-        <div v-if="bookAnalysis.similar_books && bookAnalysis.similar_books.length > 0" class="similar-section">
-          <h4>📚 相似书籍</h4>
-          <div class="similar-books">
-            <div v-for="book in bookAnalysis.similar_books" :key="book.book_id" class="similar-book-card">
-              <div class="similar-title">《{{ book.title }}》</div>
-              <div class="similar-author">{{ book.author }}</div>
-              <div class="similar-score">相似度: {{ (book.similarity * 100).toFixed(0) }}%</div>
+          <div class="msg-body">
+            <div class="thinking-box">
+              <div class="thinking-dots"><span></span><span></span><span></span></div>
+              <span>{{ thinkingText }}</span>
             </div>
           </div>
         </div>
+        <div ref="scrollAnchor"></div>
+      </div>
+    </main>
 
-        <!-- 统计 -->
-        <div class="graph-stats">
-          <div class="stat-card">
-            <div class="stat-number">{{ bookAnalysis.profile?.rating_count || 0 }}</div>
-            <div class="stat-label">评价人数</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-number">{{ bookAnalysis.profile?.avg_rating || 0 }}</div>
-            <div class="stat-label">平均评分</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-number">{{ bookAnalysis.similar_books?.length || 0 }}</div>
-            <div class="stat-label">相似书籍</div>
-          </div>
+    <!-- 输入区 -->
+    <footer class="ai-footer">
+      <div class="input-container">
+        <div class="input-row">
+          <textarea v-model="inputText" ref="inputRef" rows="1"
+            placeholder="试试：《Harry Potter》讲什么？ 或 推荐几本科幻小说..."
+            @keydown.enter.exact.prevent="onSend"
+            @input="autoGrow"
+            :disabled="isSending"
+            class="chat-textarea"></textarea>
+          <button class="send-btn" :disabled="isSending || !inputText.trim()" @click="onSend" :class="{active: inputText.trim()}">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 19V5M5 12l7-7 7 7"/>
+            </svg>
+          </button>
+        </div>
+        <div class="quick-row">
+          <button v-for="(q, i) in footerQuick" :key="i" class="quick-chip"
+            @click="sendMessage(q)" :disabled="isSending">{{ q }}</button>
         </div>
       </div>
-    </div>
+    </footer>
   </div>
 </template>
 
 <script setup>
-import { ref, nextTick, onMounted, watch } from 'vue'
+import { ref, nextTick, onMounted, computed } from 'vue'
+import { aiAPI } from '../api'
+import { useRouter } from 'vue-router'
 
-// ========== 状态 ==========
-const activeTab = ref('chat')
-const inputMessage = ref('')
+const router = useRouter()
 const messages = ref([])
-const isLoading = ref(false)
-const statusMode = ref('simulate')
-const conversationId = ref(null)
-const isTabSwitching = ref(false)
-const displayedTexts = ref({})
+const inputText = ref('')
+const isSending = ref(false)
+const aiThinking = ref(false)
+const ollamaOnline = ref(false)
+const hotBooks = ref([])
+const totalBooks = ref(0)
+const chatScrollRef = ref(null)
+const inputRef = ref(null)
+let msgId = 0
 
-// 书评
-const reviewBookId = ref(5)
-const reviewStyle = ref('personal')
-const generatedReview = ref(null)
-const isGenerating = ref(false)
-
-// 知识图谱
-const kgBookId = ref(5)
-const knowledgeGraph = ref(null)
-const knowledgeGraphMermaid = ref('')
-
-// 阅读报告
-const readingReport = ref(null)
-
-// 搜索相关
-const searchQuery = ref('')
-const searchResults = ref([])
-
-// 书籍摘要
-const summaryBookId = ref(5)
-const bookSummary = ref(null)
-
-// 完整分析
-const analyzeBookId = ref(5)
-const bookAnalysis = ref(null)
-
-const messagesContainer = ref(null)
-
-// ========== Tab 配置 ==========
-const featureTabs = [
-  { id: 'chat', name: 'AI 对话', emoji: '💬' },
-  { id: 'review', name: '书评生成', emoji: '📝' },
-  { id: 'summary', name: '书籍摘要', emoji: '📖' },
-  { id: 'analyze', name: '完整分析', emoji: '🔍' },
-  { id: 'knowledge', name: '知识图谱', emoji: '🧠' },
-  { id: 'report', name: '阅读报告', emoji: '📊' },
+// 快速提示
+const quickPrompts = [
+  { icon: '🔍', text: '《Harry Potter》这本书讲什么？' },
+  { icon: '💡', text: '推荐 5 本科幻小说经典' },
+  { icon: '📖', text: '我想看历史主题的书，有哪些推荐？' },
+  { icon: '🎯', text: '类似《The Da Vinci Code》的悬疑作品' },
 ]
 
-// ========== 初始化 ==========
-onMounted(async () => {
-  try {
-    const response = await fetch('/api/ai/status')
-    const data = await response.json()
-    statusMode.value = data.status.mode
-  } catch (e) {
-    statusMode.value = 'simulate'
-  }
-  conversationId.value = `conv_${Date.now()}`
-})
+const footerQuick = [
+  'Harry Potter',
+  '科幻小说',
+  '历史书籍',
+  '悬疑推理',
+  '经典文学',
+]
 
-// ========== Tab 切换 ==========
-function switchTab(tabId) {
-  if (tabId === activeTab.value) return
-  isTabSwitching.value = true
-  setTimeout(() => {
-    activeTab.value = tabId
-    setTimeout(() => {
-      isTabSwitching.value = false
-    }, 300)
-  }, 100)
+const userInitial = '我'
+
+function intentLabel(i) {
+  const map = { greeting: '问候', detail: '书籍详情', recommend: '推荐', similar: '相似', search: '搜索', unknown: '对话' }
+  return map[i] || '对话'
 }
 
-// ========== 消息格式化 ==========
-function formatMessage(text) {
-  if (!text) return ''
-
-  // 简单的 markdown 支持
-  let html = text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-
-  // 加粗
-  html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-
-  // 换行
-  html = html.replace(/\n/g, '<br />')
-
-  // 列表项
-  html = html.replace(/(?:^|\n)\s*[•\-]\s+(.+?)(?=\n|$)/g, '<li>$1</li>')
-
-  return html
+// 封面颜色
+const palettes = [
+  ['#a855f7', '#3b82f6'], ['#ec4899', '#f97316'], ['#06b6d4', '#22c55e'],
+  ['#f59e0b', '#ef4444'], ['#8b5cf6', '#06b6d4'], ['#10b981', '#3b82f6'],
+  ['#f43f5e', '#8b5cf6'], ['#0ea5e9', '#14b8a6'], ['#fb923c', '#ec4899'],
+]
+function coverStyle(b) {
+  const id = Number(b.book_id || b.id || b.title?.length || 1) || 1
+  const [c1, c2] = palettes[id % palettes.length]
+  return { background: `linear-gradient(135deg, ${c1} 0%, ${c2} 100%)` }
+}
+function bookLetter(b) {
+  const t = (b.title || '?').trim()
+  return t.charAt(0).toUpperCase()
 }
 
-// ========== 打字机效果 ==========
-async function typeText(index, text) {
-  const message = messages.value[index]
-  if (!message) return
-
-  message.isTyping = true
-  displayedTexts.value[index] = ''
-  const chars = text.split('')
-
-  for (let i = 0; i < chars.length; i++) {
-    await new Promise(resolve => setTimeout(resolve, 15 + Math.random() * 10))
-    displayedTexts.value[index] = text.substring(0, i + 1)
-  }
-
-  message.isTyping = false
-  displayedTexts.value[index] = ''
+function nowTime() {
+  const d = new Date()
+  return d.getHours().toString().padStart(2, '0') + ':' + d.getMinutes().toString().padStart(2, '0')
 }
-
-// ========== 对话功能 ==========
 function scrollToBottom() {
   nextTick(() => {
-    if (messagesContainer.value) {
-      messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
+    const el = chatScrollRef.value
+    if (el) {
+      el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
     }
   })
 }
-
-async function sendMessage(message) {
-  const msg = message || inputMessage.value.trim()
-  if (!msg || isLoading.value) return
-
-  // 添加用户消息
-  messages.value.push({
-    role: 'user',
-    content: msg,
-    time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
+function autoGrow() {
+  nextTick(() => {
+    const el = inputRef.value
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = Math.min(el.scrollHeight, 180) + 'px'
   })
-  inputMessage.value = ''
-  isLoading.value = true
+}
+
+function addMessage(role, text = '', opts = {}) {
+  const msg = {
+    id: ++msgId,
+    role,
+    text,
+    time: nowTime(),
+    books: opts.books || [],
+    intent: opts.intent || null,
+    isTyping: false,
+    error: opts.error || null,
+  }
+  messages.value.push(msg)
   scrollToBottom()
+  return msg
+}
 
-  // 先添加一个占位的 AI 消息，用于流式填充
-  const aiMsgIndex = messages.value.length
-  messages.value.push({
-    role: 'assistant',
-    content: '',
-    time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
-    suggestedActions: [],
-    isTyping: true,
-  })
-  displayedTexts.value[aiMsgIndex] = ''
-  scrollToBottom()
-
-  let streamSucceeded = false
-
-  try {
-    // ===== 1. 优先尝试 SSE 流式接口 =====
-    const streamResponse = await fetch('/api/ai/chat/stream', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        message: msg,
-        conversation_id: conversationId.value,
-        user_id: 8,
-      }),
-    })
-
-    if (streamResponse.ok && streamResponse.body) {
-      const reader = streamResponse.body.getReader()
-      const decoder = new TextDecoder('utf-8')
-      let buffer = ''
-      let fullText = ''
-      let receivedStart = false
-      let gotError = false
-      let errorMsg = ''
-      let done = false
-
-      while (!done) {
-        const { value, done: chunkDone } = await reader.read()
-        if (chunkDone) {
-          done = true
-          break
-        }
-        buffer += decoder.decode(value, { stream: true })
-
-        // 按行解析 SSE（每个事件由空行分隔）
-        let lineBreakIndex
-        while ((lineBreakIndex = buffer.indexOf('\n')) !== -1) {
-          const rawLine = buffer.slice(0, lineBreakIndex)
-          buffer = buffer.slice(lineBreakIndex + 1)
-          const line = rawLine.replace(/\r$/, '').trim()
-
-          if (line === '') continue
-
-          // 解析 "data: xxx" 或自定义标记
-          let payload = line
-          if (line.startsWith('data:')) {
-            payload = line.slice(5).trim()
-          } else if (line.startsWith('event:')) {
-            // 事件名，忽略
-            continue
-          }
-
-          if (!payload) continue
-
-          // 自定义标记：开始 / 结束 / 错误
-          if (payload === '[START]') {
-            receivedStart = true
-            fullText = ''
-            displayedTexts.value[aiMsgIndex] = ''
-            messages.value[aiMsgIndex].content = ''
-            scrollToBottom()
-            continue
-          }
-          if (payload === '[DONE]') {
-            done = true
-            break
-          }
-          if (payload.startsWith('[ERROR]')) {
-            gotError = true
-            errorMsg = payload.slice(7).trim() || 'AI 服务返回错误'
-            done = true
-            break
-          }
-
-          // 普通内容：逐字累积
-          if (receivedStart || fullText.length > 0) {
-            fullText += payload
-          } else {
-            // 兼容未发送 [START] 的情况
-            receivedStart = true
-            fullText = payload
-          }
-          displayedTexts.value[aiMsgIndex] = fullText
-          messages.value[aiMsgIndex].content = fullText
-          scrollToBottom()
-        }
-      }
-
-      // 最终清理 decoder
-      const tail = decoder.decode()
-      if (tail) {
-        fullText += tail
-        displayedTexts.value[aiMsgIndex] = fullText
-        messages.value[aiMsgIndex].content = fullText
-      }
-
-      if (gotError) {
-        messages.value[aiMsgIndex].content = `⚠️ ${errorMsg}`
-        messages.value[aiMsgIndex].isTyping = false
-        displayedTexts.value[aiMsgIndex] = ''
-      } else if (fullText.length > 0) {
-        streamSucceeded = true
-        messages.value[aiMsgIndex].isTyping = false
-        displayedTexts.value[aiMsgIndex] = ''
-      }
-
-      isLoading.value = false
-      scrollToBottom()
-      return
-    }
-
-    // 流式不可用，抛错走降级
-    throw new Error('stream endpoint not available')
-  } catch (streamErr) {
-    console.warn('SSE 流失败，回退到普通请求:', streamErr)
+// 打字机效果
+async function typeText(msg, fullText, speed = 12) {
+  msg.isTyping = true
+  msg.text = ''
+  for (let i = 0; i < fullText.length; i++) {
+    msg.text += fullText[i]
+    if (i % 3 === 0) await new Promise(r => setTimeout(r, speed))
   }
+  msg.isTyping = false
+}
 
-  // ===== 2. 回退：普通 POST 请求 =====
+async function onSend() {
+  const txt = inputText.value.trim()
+  if (!txt || isSending.value) return
+  inputText.value = ''
+  autoGrow()
+  sendMessage(txt)
+}
+
+const thinkingText = computed(() => {
+  const texts = ['正在检索馆藏...', '正在理解你的问题...', '正在生成回复...', '查询中...']
+  return texts[Math.floor(Date.now() / 2000) % texts.length]
+})
+
+async function sendMessage(text) {
+  if (!text || isSending.value) return
+  addMessage('user', text)
+  aiThinking.value = true
+  isSending.value = true
   try {
-    const response = await fetch('/api/ai/chat', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        message: msg,
-        conversation_id: conversationId.value,
-        user_id: 8,
-      }),
-    })
-
-    const data = await response.json()
-
-    if (data.success) {
-      messages.value[aiMsgIndex].content = data.response.content
-      messages.value[aiMsgIndex].suggestedActions = data.suggested_actions || []
-      messages.value[aiMsgIndex].isTyping = false
-      statusMode.value = data.response.mode
-      await typeText(aiMsgIndex, data.response.content)
-    } else {
-      messages.value[aiMsgIndex].content = '抱歉，出了点问题。请稍后再试。'
-      messages.value[aiMsgIndex].isTyping = false
-    }
+    const data = await aiAPI.chat(text)
+    aiThinking.value = false
+    const aiMsg = addMessage('ai', '', { intent: data.intent })
+    const reply = data.reply || (data.books && data.books.length ? '为你找到以下书籍：' : '抱歉，我没有找到相关信息。')
+    const books = (data.books || []).slice(0, 8).filter(b => b && (b.book_id || b.id) && b.title)
+    if (books.length) aiMsg.books = books
+    // 打字机
+    await typeText(aiMsg, reply, 10)
   } catch (err) {
-    messages.value[aiMsgIndex].content = '无法连接到 AI 服务，请检查网络。'
-    messages.value[aiMsgIndex].isTyping = false
-  }
-
-  isLoading.value = false
-  scrollToBottom()
-}
-
-function quickAction(type) {
-  const actions = {
-    review: '帮我写一篇书评，可以先输入一个书籍ID吗？',
-    recommend: '我想看一些推荐的书籍，你能推荐一些适合我的吗？',
-    analyze: '我想让你分析一本书的核心主题',
-    report: '生成我的阅读报告',
-  }
-  sendMessage(actions[type] || '你能做什么？')
-}
-
-// ========== 书评生成 ==========
-async function generateReview() {
-  if (!reviewBookId.value || isGenerating.value) return
-
-  isGenerating.value = true
-  generatedReview.value = null
-
-  try {
-    const response = await fetch(`/api/ai/review/${reviewBookId.value}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ style: reviewStyle.value }),
+    aiThinking.value = false
+    addMessage('ai', '', { error: '无法连接到 AI 服务，请稍后重试。' })
+    console.error(err)
+  } finally {
+    isSending.value = false
+    nextTick(() => {
+      const el = inputRef.value
+      if (el) el.focus()
     })
-    const data = await response.json()
-
-    if (data.success) {
-      generatedReview.value = data.review
-    }
-  } catch (err) {
-    console.error('生成书评失败:', err)
   }
-
-  isGenerating.value = false
 }
 
-// ========== 知识图谱生成 ==========
-async function generateKnowledgeGraph() {
-  if (!kgBookId.value || isGenerating.value) return
+function openBook(b) {
+  const id = b.book_id || b.id
+  if (id) router.push('/book/' + id)
+  else sendMessage('介绍一下《' + b.title + '》')
+}
 
-  isGenerating.value = true
-  knowledgeGraph.value = null
+function clearChat() {
+  messages.value = []
+  inputText.value = ''
+}
+
+function goHome() {
+  router.push('/')
+}
+
+onMounted(async () => {
+  try {
+    const data = await aiAPI.getStatus()
+    ollamaOnline.value = !!(data && data.ollama && data.ollama.available)
+    if (data && data.library) totalBooks.value = Number(data.library.total_books) || 0
+  } catch(e) { console.warn(e) }
 
   try {
-    const response = await fetch(`/api/ai/knowledge/${kgBookId.value}`, {
-      method: 'POST',
-    })
-    const data = await response.json()
-
-    if (data.success) {
-      knowledgeGraph.value = data.graph
-      knowledgeGraphMermaid.value = data.mermaid
-    }
-  } catch (err) {
-    console.error('生成知识图谱失败:', err)
-  }
-
-  isGenerating.value = false
-}
-
-// ========== 阅读报告生成 ==========
-async function generateReport() {
-  if (isGenerating.value) return
-
-  isGenerating.value = true
-  readingReport.value = null
-
-  try {
-    const response = await fetch('/api/ai/report/8', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ use_llm: true }),
-    })
-    const data = await response.json()
-
-    if (data.success) {
-      readingReport.value = data.report
-    }
-  } catch (err) {
-    console.error('生成报告失败:', err)
-  }
-
-  isGenerating.value = false
-}
-
-// ========== 书籍搜索 ==========
-async function searchBooks() {
-  if (!searchQuery.value.trim()) return
-
-  try {
-    const response = await fetch(`/api/ai/search?q=${encodeURIComponent(searchQuery.value)}&limit=10`)
-    const data = await response.json()
-
-    if (data.success) {
-      searchResults.value = data.books
-    }
-  } catch (err) {
-    console.error('搜索失败:', err)
-  }
-}
-
-function selectBook(book) {
-  // 将选中的书名发送到聊天
-  const msg = `给我介绍《${book.title}》这本书`
-  sendMessage(msg)
-  searchResults.value = []
-  searchQuery.value = ''
-}
-
-function selectBookForAnalysis(bookId) {
-  summaryBookId.value = bookId
-  analyzeBookId.value = bookId
-}
-
-// ========== 书籍摘要生成 ==========
-async function generateSummary() {
-  if (!summaryBookId.value || isGenerating.value) return
-
-  isGenerating.value = true
-  bookSummary.value = null
-
-  try {
-    const response = await fetch(`/api/ai/summary/${summaryBookId.value}`, {
-      method: 'GET',
-    })
-    const data = await response.json()
-
-    if (data.success) {
-      bookSummary.value = data.summary
-    }
-  } catch (err) {
-    console.error('生成摘要失败:', err)
-  }
-
-  isGenerating.value = false
-}
-
-// ========== 完整分析 ==========
-async function generateAnalysis() {
-  if (!analyzeBookId.value || isGenerating.value) return
-
-  isGenerating.value = true
-  bookAnalysis.value = null
-
-  try {
-    const response = await fetch(`/api/ai/analyze/${analyzeBookId.value}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ use_llm: false }),
-    })
-    const data = await response.json()
-
-    if (data.success) {
-      bookAnalysis.value = data.analysis
-    }
-  } catch (err) {
-    console.error('分析失败:', err)
-  }
-
-  isGenerating.value = false
-}
-
-watch(messages, () => {
-  scrollToBottom()
-}, { deep: true })
+    const hot = await aiAPI.getPopular(6)
+    hotBooks.value = (hot && hot.books || []).filter(b => b && (b.book_id || b.id) && b.title).slice(0, 6)
+  } catch(e) { console.warn(e) }
+})
 </script>
 
+<style>
+/* 基础重置 */
+.ai-app, .ai-app * { box-sizing: border-box; }
+</style>
+
 <style scoped>
-.ai-assistant {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 20px;
-  background: var(--color-bg-card);
-  min-height: calc(100vh - 120px);
-  border-radius: 12px;
-  animation: fadeIn 0.4s ease-out;
+/* ============ 全局 ============ */
+.ai-app {
+  position: relative;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: #0a0a0f;
+  color: #e4e4e7;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif;
 }
 
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
+/* 背景光晕 */
+.bg-orbs {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 0;
+}
+.orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(80px);
+  opacity: 0.35;
+  animation: orb-float 18s ease-in-out infinite;
+}
+.orb-1 {
+  width: 520px; height: 520px;
+  background: radial-gradient(circle, #a855f7 0%, transparent 70%);
+  top: -120px; left: -100px;
+}
+.orb-2 {
+  width: 480px; height: 480px;
+  background: radial-gradient(circle, #06b6d4 0%, transparent 70%);
+  top: 30%; right: -120px;
+  animation-delay: -6s;
+}
+.orb-3 {
+  width: 440px; height: 440px;
+  background: radial-gradient(circle, #3b82f6 0%, transparent 70%);
+  bottom: -150px; left: 30%;
+  animation-delay: -12s;
+}
+@keyframes orb-float {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(40px, -30px) scale(1.1); }
+  66% { transform: translate(-30px, 40px) scale(0.95); }
+}
+.bg-noise {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: radial-gradient(rgba(255,255,255,0.03) 1px, transparent 1px);
+  background-size: 3px 3px;
+  z-index: 1;
+  opacity: 0.4;
 }
 
-/* 顶部栏 */
-.ai-toolbar {
+/* ============ 顶部栏 ============ */
+.ai-header {
+  position: relative;
+  z-index: 10;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 16px 20px;
-  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-secondary) 100%);
+  padding: 16px 32px;
+  background: rgba(15, 15, 25, 0.6);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.header-left {
+  display: flex; align-items: center; gap: 14px;
+}
+.brand-logo {
+  width: 42px; height: 42px;
   border-radius: 12px;
-  color: white;
-  margin-bottom: 20px;
-}
-
-.toolbar-left h1 {
-  margin: 0;
-  font-size: 24px;
-  font-weight: 600;
-}
-
-.emoji { font-size: 28px; }
-.subtitle { font-size: 14px; opacity: 0.9; margin-left: 8px; }
-
-.status-badge {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 16px;
-  background: rgba(255,255,255,0.2);
-  border-radius: 20px;
-  font-size: 14px;
-}
-
-.status-badge .dot {
-  width: 8px;
-  height: 8px;
-  background: #4ade80;
-  border-radius: 50%;
-  animation: pulse 2s infinite;
-}
-
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
-}
-
-/* Tab 栏 */
-.feature-tabs {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 20px;
-  overflow-x: auto;
-  transition: all 0.3s ease;
-}
-
-.feature-tabs.tabs-animating {
-  opacity: 0.7;
-  transform: scale(0.98);
-}
-
-.tab-btn {
-  flex: 1;
-  min-width: 120px;
-  padding: 12px 20px;
-  background: var(--color-bg-secondary);
-  border: 2px solid transparent;
-  border-radius: 8px;
-  color: var(--color-text);
+  display: flex; align-items: center; justify-content: center;
   cursor: pointer;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  animation: tabSlideIn 0.4s ease-out forwards;
-  opacity: 0;
+  transition: transform 0.2s;
 }
-
-@keyframes tabSlideIn {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
+.brand-logo:hover { transform: scale(1.05); }
+.logo-svg { width: 42px; height: 42px; filter: drop-shadow(0 4px 14px rgba(168, 85, 247, 0.4)); }
+.brand-text .brand-title {
+  font-size: 17px; font-weight: 700;
+  background: linear-gradient(135deg, #fff 0%, #c4b5fd 60%, #67e8f9 100%);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  background-clip: text;
+  letter-spacing: 0.3px;
 }
-
-.tab-btn:hover {
-  background: var(--color-bg-input);
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+.brand-sub {
+  font-size: 12px; color: #71717a; margin-top: 2px; display: flex; align-items: center; gap: 6px;
 }
-
-.tab-btn.active {
-  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-secondary) 100%);
-  border-color: var(--color-primary);
-  color: white;
-  transform: translateY(-2px);
-  box-shadow: 0 4px 15px rgba(249, 115, 22, 0.3);
+.status-dot {
+  width: 6px; height: 6px; border-radius: 50%; background: #52525b;
+  display: inline-block; position: relative;
 }
+.status-dot.online { background: #10b981; box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.2); }
 
-.tab-emoji { font-size: 18px; }
-.tab-name { font-size: 14px; font-weight: 500; }
-
-/* 聊天界面 */
-.chat-panel {
-  background: var(--color-bg);
-  border-radius: 12px;
-  padding: 16px;
-}
-
-.chat-messages {
-  min-height: 400px;
-  max-height: 60vh;
-  overflow-y: auto;
-  padding: 16px;
-  background: var(--color-bg-card);
-  border-radius: 8px;
-  margin-bottom: 16px;
-}
-
-/* 对话气泡动画 */
-.message {
-  display: flex;
-  gap: 12px;
-  margin-bottom: 20px;
-  align-items: flex-start;
-  animation: messageSlideIn 0.4s ease-out forwards;
-}
-
-@keyframes messageSlideIn {
-  from {
-    opacity: 0;
-    transform: translateY(20px) scale(0.95);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
-
-.slide-in-left {
-  animation: slideInLeft 0.4s ease-out forwards;
-}
-
-@keyframes slideInLeft {
-  from { opacity: 0; transform: translateX(-30px); }
-  to { opacity: 1; transform: translateX(0); }
-}
-
-.slide-in-right {
-  animation: slideInRight 0.4s ease-out forwards;
-}
-
-@keyframes slideInRight {
-  from { opacity: 0; transform: translateX(30px); }
-  to { opacity: 1; transform: translateX(0); }
-}
-
-/* 欢迎消息动画 */
-.welcome-message {
-  animation: welcomeFadeIn 0.6s ease-out forwards;
-}
-
-@keyframes welcomeFadeIn {
-  0% { opacity: 0; transform: translateY(20px); }
-  100% { opacity: 1; transform: translateY(0); }
-}
-
-.msg-avatar {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 20px;
-  background: var(--color-primary);
-  flex-shrink: 0;
-  transition: transform 0.3s ease;
-}
-
-.message:hover .msg-avatar {
-  transform: scale(1.1);
-}
-
-.user-message .msg-avatar {
-  background: var(--color-secondary);
-}
-
-.msg-content {
-  flex: 1;
-  max-width: 80%;
-}
-
-.msg-header {
-  font-weight: 600;
-  font-size: 14px;
-  margin-bottom: 6px;
-  color: var(--color-text);
-}
-
-.msg-time {
-  font-weight: 400;
-  font-size: 12px;
-  color: var(--color-text-muted);
-  margin-left: 8px;
-}
-
-.msg-text {
-  background: var(--color-bg-secondary);
-  padding: 12px 16px;
-  border-radius: 12px;
-  line-height: 1.7;
-  transition: all 0.3s ease;
-}
-
-.user-message .msg-text {
-  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-secondary) 100%);
-  color: white;
-  border-bottom-right-radius: 4px;
-}
-
-.ai-message .msg-text {
-  border-bottom-left-radius: 4px;
-}
-
-.message:hover .msg-text {
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
-}
-
-/* 打字机光标 */
-.typing-cursor {
-  display: inline-block;
-  width: 2px;
-  height: 16px;
-  background: var(--color-primary);
-  margin-left: 2px;
-  animation: blink 0.8s infinite;
-  vertical-align: middle;
-}
-
-@keyframes blink {
-  0%, 50% { opacity: 1; }
-  51%, 100% { opacity: 0; }
-}
-
-/* 打字消息样式 */
-.typing-message .msg-text {
-  min-height: 40px;
-}
-
-.suggested-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 12px;
-  animation: fadeInUp 0.4s ease-out 0.3s forwards;
-  opacity: 0;
-}
-
-@keyframes fadeInUp {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-.suggestion-btn {
+.header-right { display: flex; gap: 10px; align-items: center; }
+.chip-btn {
+  display: inline-flex; align-items: center; gap: 7px;
   padding: 8px 14px;
-  background: var(--color-accent);
-  border: 1px solid var(--color-border);
-  border-radius: 20px;
-  color: var(--color-text);
-  cursor: pointer;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.08);
+  color: #e4e4e7;
+  border-radius: 100px;
   font-size: 13px;
-  transition: all 0.2s;
-}
-
-.suggestion-btn:hover {
-  background: var(--color-primary);
-  color: white;
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(249, 115, 22, 0.3);
-}
-
-/* 加载动画 */
-.loading-dots {
-  display: flex;
-  gap: 6px;
-  padding: 16px;
-}
-
-.loading-dots span {
-  width: 10px;
-  height: 10px;
-  background: var(--color-primary);
-  border-radius: 50%;
-  animation: bounce 1.4s infinite ease-in-out both;
-}
-
-.loading-dots span:nth-child(1) { animation-delay: -0.32s; }
-.loading-dots span:nth-child(2) { animation-delay: -0.16s; }
-
-@keyframes bounce {
-  0%, 80%, 100% { transform: scale(0); }
-  40% { transform: scale(1); }
-}
-
-.typing { color: var(--color-text-muted); font-weight: 400; font-size: 12px; }
-
-/* 快捷操作 */
-.quick-actions {
-  display: flex;
-  gap: 10px;
-  margin-bottom: 16px;
-  flex-wrap: wrap;
-}
-
-.quick-btn {
-  padding: 10px 18px;
-  background: var(--color-bg-secondary);
-  border: 1px solid var(--color-border);
-  border-radius: 8px;
-  color: var(--color-text);
-  cursor: pointer;
-  font-size: 14px;
-  transition: all 0.2s;
-}
-
-.quick-btn:hover {
-  background: var(--color-primary);
-  color: white;
-  border-color: var(--color-primary);
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(249, 115, 22, 0.3);
-}
-
-/* 输入区 */
-.chat-input-area {
-  display: flex;
-  gap: 12px;
-  padding: 16px;
-  background: var(--color-bg-secondary);
-  border-radius: 8px;
-}
-
-.chat-input {
-  flex: 1;
-  padding: 12px;
-  background: var(--color-bg-input);
-  border: 1px solid var(--color-border);
-  border-radius: 8px;
-  color: var(--color-text);
-  font-size: 14px;
-  resize: none;
-  font-family: inherit;
-  transition: border-color 0.2s ease;
-}
-
-.chat-input:focus {
-  outline: none;
-  border-color: var(--color-primary);
-  box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.1);
-}
-
-.send-btn {
-  padding: 12px 24px;
-  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-secondary) 100%);
-  border: none;
-  border-radius: 8px;
-  color: white;
-  cursor: pointer;
   font-weight: 500;
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  cursor: pointer;
   transition: all 0.2s;
 }
-
-.send-btn:hover:not(:disabled) {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 15px rgba(249, 115, 22, 0.4);
+.chip-btn:hover {
+  background: rgba(168, 85, 247, 0.15);
+  border-color: rgba(168, 85, 247, 0.35);
+  color: #fff;
+  transform: translateY(-1px);
 }
+.chip-btn.ghost { padding: 8px 10px; }
 
-.send-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
+/* ============ 对话区 ============ */
+.chat-main {
+  position: relative;
+  z-index: 5;
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
+.chat-main::-webkit-scrollbar { width: 6px; }
+.chat-main::-webkit-scrollbar-track { background: transparent; }
+.chat-main::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 3px; }
+.chat-main::-webkit-scrollbar-thumb:hover { background: rgba(168,85,247,0.3); }
 
-.send-emoji { font-size: 16px; }
-
-/* 通用面板 */
-.panel-content {
-  animation: panelFadeIn 0.4s ease-out;
+/* ============ 欢迎页 ============ */
+.welcome-wrap {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 5vh 32px 48px;
 }
-
-@keyframes panelFadeIn {
+.welcome-card {
+  animation: hero-in 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+}
+@keyframes hero-in {
   from { opacity: 0; transform: translateY(20px); }
   to { opacity: 1; transform: translateY(0); }
 }
-
-.panel-section {
-  background: var(--color-bg-card);
-  padding: 24px;
-  border-radius: 12px;
-  margin-bottom: 20px;
-  transition: all 0.3s ease;
+.welcome-hero {
+  text-align: center;
+  padding: 40px 20px 28px;
 }
-
-.panel-section:hover {
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+.hero-icon { display: inline-block; margin-bottom: 18px; }
+.welcome-hero h1 {
+  font-size: 32px; font-weight: 700;
+  margin: 0 0 10px;
+  background: linear-gradient(135deg, #fff 0%, #c4b5fd 50%, #67e8f9 100%);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  background-clip: text;
+  letter-spacing: -0.5px;
 }
+.hero-sub { color: #71717a; font-size: 14px; margin: 0; }
 
-.result-section {
-  animation: resultSlideIn 0.5s ease-out;
-  border: 1px solid var(--color-border);
+/* 快速提示卡片 */
+.prompt-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+  margin: 28px 0;
 }
-
-@keyframes resultSlideIn {
-  from { opacity: 0; transform: translateY(30px); }
+.prompt-card {
+  display: flex; align-items: center; gap: 12px;
+  padding: 18px 20px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 16px;
+  text-align: left;
+  color: #e4e4e7;
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  opacity: 0;
+  animation: card-in 0.5s forwards;
+  font-family: inherit;
+}
+@keyframes card-in {
+  from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: translateY(0); }
 }
-
-.panel-section h3 {
-  margin-top: 0;
-  color: var(--color-text);
-  font-size: 20px;
+.prompt-card:hover {
+  background: rgba(168, 85, 247, 0.08);
+  border-color: rgba(168, 85, 247, 0.3);
+  transform: translateY(-3px);
+  box-shadow: 0 12px 32px rgba(168, 85, 247, 0.15);
 }
+.prompt-emoji { font-size: 20px; }
+.prompt-text { flex: 1; font-size: 13.5px; color: #d4d4d8; font-weight: 500; line-height: 1.45; }
+.prompt-arrow { color: #a1a1aa; font-size: 16px; transition: transform 0.2s, color 0.2s; font-weight: 600; }
+.prompt-card:hover .prompt-arrow { color: #c4b5fd; transform: translateX(4px); }
 
-.hint {
-  color: var(--color-text-muted);
-  font-size: 14px;
+/* 热门书籍行 */
+.hot-row {
+  margin-top: 32px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 20px;
+  padding: 24px;
 }
-
-.input-group {
-  margin-bottom: 16px;
+.hot-row-header {
+  display: flex; justify-content: space-between; align-items: baseline;
+  margin-bottom: 18px;
 }
+.hot-title { font-size: 15px; font-weight: 600; color: #f4f4f5; }
+.hot-sub { font-size: 12px; color: #71717a; }
 
-.input-group label {
-  display: block;
-  margin-bottom: 6px;
-  font-weight: 500;
-  color: var(--color-text);
+.hot-book-row {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 12px;
 }
-
-.input-group input,
-.input-group select {
-  width: 100%;
+.hot-book-card {
+  display: flex; gap: 12px;
   padding: 12px;
-  background: var(--color-bg-input);
-  border: 1px solid var(--color-border);
-  border-radius: 8px;
-  color: var(--color-text);
-  font-size: 14px;
-  transition: border-color 0.2s ease;
-}
-
-.input-group input:focus,
-.input-group select:focus {
-  outline: none;
-  border-color: var(--color-primary);
-}
-
-.primary-btn {
-  padding: 14px 28px;
-  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-secondary) 100%);
-  border: none;
-  border-radius: 8px;
-  color: white;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 14px;
   cursor: pointer;
-  font-weight: 500;
-  font-size: 15px;
-  transition: all 0.2s;
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  opacity: 0;
+  animation: card-in 0.5s forwards;
 }
-
-.primary-btn:hover:not(:disabled) {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+.hot-book-card:hover {
+  background: rgba(255,255,255,0.06);
+  border-color: rgba(168, 85, 247, 0.3);
+  transform: translateY(-3px);
+  box-shadow: 0 10px 28px rgba(0,0,0,0.3);
 }
-
-.primary-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.btn-loading {
+.hbc-cover {
+  width: 52px; height: 70px;
+  border-radius: 8px;
+  flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 6px 14px rgba(0,0,0,0.3);
   position: relative;
 }
+.hbc-letter { font-size: 22px; font-weight: 800; color: #fff; text-shadow: 0 2px 4px rgba(0,0,0,0.3); }
+.hbc-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.hbc-title {
+  font-size: 13px; font-weight: 600; color: #e4e4e7;
+  overflow: hidden; text-overflow: ellipsis;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  line-height: 1.4;
+}
+.hbc-author { font-size: 11.5px; color: #71717a; }
+.hbc-rating { display: flex; align-items: center; gap: 3px; font-size: 11.5px; color: #fbbf24; font-weight: 600; margin-top: auto; }
 
-.btn-loading::after {
-  content: '';
-  position: absolute;
-  width: 16px;
-  height: 16px;
-  border: 2px solid transparent;
-  border-top-color: white;
+/* ============ 消息 ============ */
+.messages-wrap {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 32px 32px 32px;
+  display: flex; flex-direction: column; gap: 28px;
+}
+
+.msg-row { display: flex; gap: 14px; align-items: flex-start; }
+.msg-row.user { flex-direction: row-reverse; }
+
+.msg-avatar {
+  width: 34px; height: 34px;
   border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-}
-
-/* 书评样式 */
-.meta-info {
-  display: flex;
-  gap: 20px;
-  flex-wrap: wrap;
-  margin-bottom: 16px;
-  color: var(--color-text-muted);
-  font-size: 14px;
-}
-
-.tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 16px;
-}
-
-.tag {
-  padding: 6px 12px;
-  background: var(--color-accent);
-  border-radius: 16px;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
   font-size: 13px;
-  transition: all 0.2s ease;
-}
-
-.tag:hover {
-  transform: scale(1.05);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
-}
-
-.highlights {
-  background: var(--color-bg-secondary);
-  padding: 16px 24px;
-  border-radius: 8px;
-  margin-bottom: 16px;
-}
-
-.highlights h4 { margin-top: 0; }
-
-.content {
-  line-height: 1.8;
-  margin-bottom: 16px;
-}
-
-.target-readers {
-  padding: 12px 16px;
-  background: var(--color-accent);
-  border-radius: 8px;
-  margin-bottom: 16px;
-}
-
-.generation-info {
-  font-size: 12px;
-  color: var(--color-text-muted);
-  text-align: right;
-}
-
-/* 知识图谱 */
-.summary {
-  font-size: 15px;
-  line-height: 1.8;
-  padding: 16px;
-  background: var(--color-bg-secondary);
-  border-radius: 8px;
-  border-left: 4px solid var(--color-primary);
-}
-
-.themes-section {
-  margin: 20px 0;
-}
-
-.themes {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-}
-
-.theme-tag {
-  padding: 8px 16px;
-  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-secondary) 100%);
-  color: white;
-  border-radius: 20px;
-  font-weight: 500;
-  transition: all 0.2s ease;
-}
-
-.theme-tag:hover {
-  transform: scale(1.05);
-}
-
-.mermaid-container {
-  margin: 20px 0;
-}
-
-.mermaid-code {
-  background: var(--color-bg-input);
-  padding: 16px;
-  border-radius: 8px;
-  font-family: monospace;
-  font-size: 13px;
-  white-space: pre-wrap;
-  line-height: 1.6;
-}
-
-.graph-stats {
-  display: flex;
-  gap: 20px;
-  margin-top: 20px;
-}
-
-.stat-card {
-  flex: 1;
-  padding: 20px;
-  background: var(--color-bg-secondary);
-  border-radius: 8px;
-  text-align: center;
-  transition: all 0.3s ease;
-}
-
-.stat-card:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
-}
-
-.stat-number {
-  font-size: 32px;
-  font-weight: 700;
-  color: var(--color-primary);
-}
-
-.stat-label {
-  font-size: 14px;
-  color: var(--color-text-muted);
-  margin-top: 4px;
-}
-
-/* 报告 */
-.personality {
-  font-size: 18px;
   font-weight: 600;
-  color: var(--color-primary);
-  padding: 16px;
-  background: var(--color-accent);
-  border-radius: 8px;
-  margin-bottom: 20px;
+}
+.msg-avatar.user {
+  background: linear-gradient(135deg, #475569 0%, #1e293b 100%);
+  color: #e2e8f0;
+  border: 1px solid rgba(255,255,255,0.08);
+}
+.msg-avatar.ai {
+  background: transparent;
 }
 
-.stats-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 16px;
-  margin-bottom: 20px;
-}
-
-.insights-section {
-  background: var(--color-bg-secondary);
-  padding: 20px 24px;
-  border-radius: 8px;
-  margin-bottom: 20px;
-}
-
-.insights-section ul {
-  margin: 12px 0 0 0;
-  padding-left: 20px;
-}
-
-.insights-section li {
+.msg-body { max-width: calc(100% - 50px); }
+.msg-meta {
+  display: flex; align-items: center; gap: 8px;
   margin-bottom: 8px;
-  line-height: 1.6;
+  font-size: 11.5px;
+  color: #71717a;
 }
-
-.report-summary {
-  background: var(--color-bg-secondary);
-  padding: 20px 24px;
-  border-radius: 8px;
-  margin-bottom: 20px;
-  line-height: 1.8;
-}
-
-.recommendations-section {
-  margin-top: 20px;
-}
-
-.recommendation-card {
-  padding: 16px;
-  background: var(--color-bg-secondary);
-  border-radius: 8px;
-  margin-bottom: 12px;
-  border-left: 4px solid var(--color-primary);
-  transition: all 0.2s ease;
-  animation: cardSlideIn 0.4s ease-out forwards;
-}
-
-.recommendation-card:hover {
-  transform: translateX(5px);
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
-}
-
-@keyframes cardSlideIn {
-  from { opacity: 0; transform: translateX(-20px); }
-  to { opacity: 1; transform: translateX(0); }
-}
-
-.rec-title {
-  font-weight: 600;
-  font-size: 16px;
-  color: var(--color-text);
-}
-
-.rec-author {
-  font-size: 13px;
-  color: var(--color-text-muted);
-  margin: 4px 0;
-}
-
-.rec-reason {
-  font-size: 14px;
-  line-height: 1.6;
-  margin: 8px 0;
-}
-
-.rec-score {
-  font-size: 13px;
-  color: var(--color-primary);
+.msg-row.user .msg-meta { justify-content: flex-end; }
+.msg-sender { font-weight: 600; color: #a1a1aa; font-size: 12px; }
+.msg-time { color: #52525b; }
+.msg-intent {
+  padding: 2px 8px;
+  background: rgba(168, 85, 247, 0.15);
+  color: #c4b5fd;
+  border-radius: 100px;
+  font-size: 10.5px;
   font-weight: 500;
 }
 
-/* 滚动条 */
-::-webkit-scrollbar { width: 8px; }
-::-webkit-scrollbar-track { background: var(--color-bg); }
-::-webkit-scrollbar-thumb { background: var(--color-border); border-radius: 4px; transition: background 0.2s; }
-::-webkit-scrollbar-thumb:hover { background: var(--color-primary); }
-
-/* 搜索栏 */
-.search-bar {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 16px;
+.msg-bubble {
+  padding: 14px 18px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 18px;
+  font-size: 14.5px;
+  line-height: 1.7;
+  color: #e4e4e7;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  position: relative;
 }
+.msg-row.user .msg-bubble {
+  background: linear-gradient(135deg, rgba(168, 85, 247, 0.18) 0%, rgba(59, 130, 246, 0.18) 100%);
+  border: 1px solid rgba(168, 85, 247, 0.25);
+  color: #f4f4f5;
+}
+.msg-bubble pre {
+  margin: 0;
+  font-family: inherit;
+  white-space: pre-wrap;
+  font-size: inherit;
+  line-height: inherit;
+  color: inherit;
+}
+.msg-bubble.typing .caret {
+  display: inline-block; width: 2px; height: 1.1em;
+  background: #c4b5fd; vertical-align: text-bottom;
+  margin-left: 2px;
+  animation: blink 0.8s steps(2) infinite;
+}
+@keyframes blink { 50% { opacity: 0; } }
 
-.search-input {
-  flex: 1;
+/* 错误 */
+.msg-error {
   padding: 12px 16px;
-  background: var(--color-bg-input);
-  border: 1px solid var(--color-border);
-  border-radius: 8px;
-  color: var(--color-text);
-  font-size: 14px;
-  transition: border-color 0.2s ease;
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  border-radius: 12px;
+  font-size: 13.5px;
+  color: #fca5a5;
+  display: flex; gap: 10px; align-items: center;
 }
 
-.search-input:focus {
-  outline: none;
-  border-color: var(--color-primary);
-}
-
-.search-btn {
-  padding: 12px 20px;
-  background: var(--color-primary);
-  border: none;
-  border-radius: 8px;
-  color: white;
-  cursor: pointer;
-  font-size: 16px;
-  transition: all 0.2s;
-}
-
-.search-btn:hover {
-  background: var(--color-secondary);
-  transform: scale(1.05);
-}
-
-/* 搜索结果 */
-.search-results {
-  background: var(--color-bg-card);
-  border-radius: 8px;
-  margin-bottom: 16px;
-  overflow: hidden;
-  animation: slideDown 0.3s ease-out;
-}
-
-@keyframes slideDown {
-  from { opacity: 0; transform: translateY(-10px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-.search-result-item {
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--color-border);
-  cursor: pointer;
-  transition: background 0.2s;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.search-result-item:hover {
-  background: var(--color-bg-secondary);
-}
-
-.search-result-item:last-child {
-  border-bottom: none;
-}
-
-.book-title {
-  font-weight: 500;
-  color: var(--color-text);
-}
-
-.book-author {
-  font-size: 13px;
-  color: var(--color-text-muted);
-}
-
-/* 摘要面板 */
-.one-line {
-  font-size: 18px;
-  font-weight: 600;
-  color: var(--color-primary);
-  padding: 16px;
-  background: var(--color-accent);
-  border-radius: 8px;
-  margin: 16px 0;
-}
-
-.summary-section,
-.target-section,
-.guide-section {
-  background: var(--color-bg-secondary);
-  padding: 20px;
-  border-radius: 8px;
-  margin: 16px 0;
-}
-
-.summary-section h4,
-.target-section h4,
-.guide-section h4 {
-  margin-top: 0;
-  color: var(--color-text);
-}
-
-.summary-section p,
-.target-section p,
-.guide-section p {
-  line-height: 1.8;
-  margin: 8px 0;
-}
-
-/* 完整分析 */
-.profile-section {
-  margin-bottom: 20px;
-}
-
-.profile-section h3 {
-  margin-bottom: 12px;
-}
-
-.similar-section {
-  background: var(--color-bg-secondary);
-  padding: 20px;
-  border-radius: 8px;
-  margin: 16px 0;
-}
-
-.similar-section h4 {
-  margin-top: 0;
-}
-
-.similar-books {
+/* ============ 书籍卡片网格 ============ */
+.books-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
   gap: 12px;
-  margin-top: 12px;
+  margin-top: 14px;
 }
-
-.similar-book-card {
-  background: var(--color-bg);
-  padding: 12px;
+.book-card {
+  display: flex; gap: 12px;
+  padding: 14px;
+  background: rgba(255,255,255,0.035);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 16px;
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  opacity: 0;
+  animation: card-in 0.5s forwards;
+}
+.book-card:hover {
+  background: rgba(255,255,255,0.06);
+  border-color: rgba(168, 85, 247, 0.3);
+  transform: translateY(-3px);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.25);
+}
+.bc-cover {
+  width: 58px; height: 78px;
   border-radius: 8px;
-  border: 1px solid var(--color-border);
-  transition: all 0.2s ease;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 6px 16px rgba(0,0,0,0.3);
+  position: relative;
 }
-
-.similar-book-card:hover {
-  border-color: var(--color-primary);
-  transform: translateY(-2px);
+.bc-letter { font-size: 22px; font-weight: 800; color: #fff; text-shadow: 0 2px 4px rgba(0,0,0,0.3); }
+.bc-rating {
+  position: absolute;
+  bottom: -8px; right: -8px;
+  background: rgba(15,15,25,0.95);
+  border: 1px solid rgba(255,255,255,0.1);
+  padding: 2px 7px;
+  border-radius: 100px;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #fbbf24;
+  display: inline-flex; align-items: center; gap: 2px;
 }
-
-.similar-title {
-  font-weight: 600;
-  font-size: 14px;
-  margin-bottom: 4px;
-  color: var(--color-text);
+.bc-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.bc-title {
+  font-size: 13.5px; font-weight: 600; color: #e4e4e7;
+  overflow: hidden; text-overflow: ellipsis;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  line-height: 1.4;
 }
-
-.similar-author {
-  font-size: 12px;
-  color: var(--color-text-muted);
-  margin-bottom: 8px;
-}
-
-.similar-score {
-  font-size: 13px;
-  color: var(--color-primary);
+.bc-author { font-size: 11.5px; color: #71717a; }
+.bc-meta { font-size: 11px; color: #52525b; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.meta-dot::before { content: '·'; margin-right: 6px; color: #3f3f46; }
+.bc-tag {
+  margin-top: auto;
+  padding: 3px 8px;
+  background: rgba(168, 85, 247, 0.12);
+  border-radius: 6px;
+  font-size: 10.5px;
+  color: #c4b5fd;
   font-weight: 500;
+  align-self: flex-start;
 }
 
-/* 响应式布局 */
+/* ============ 消息动画 ============ */
+.msg-enter-active, .msg-leave-active { transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+.msg-enter-from { opacity: 0; transform: translateY(10px); }
+.msg-leave-to { opacity: 0; }
+
+/* ============ 正在思考 ============ */
+.thinking-box {
+  display: inline-flex; align-items: center; gap: 10px;
+  padding: 14px 18px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 18px;
+  font-size: 13.5px;
+  color: #a1a1aa;
+}
+.thinking-dots { display: inline-flex; gap: 4px; }
+.thinking-dots span {
+  width: 6px; height: 6px;
+  background: linear-gradient(135deg, #a855f7, #06b6d4);
+  border-radius: 50%;
+  animation: bounce-dot 1.4s ease-in-out infinite;
+}
+.thinking-dots span:nth-child(2) { animation-delay: 0.2s; }
+.thinking-dots span:nth-child(3) { animation-delay: 0.4s; }
+@keyframes bounce-dot {
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.6; }
+  30% { transform: translateY(-5px); opacity: 1; }
+}
+
+/* ============ 底部输入 ============ */
+.ai-footer {
+  position: relative;
+  z-index: 10;
+  padding: 20px 32px 28px;
+  background: linear-gradient(180deg, transparent 0%, rgba(10, 10, 15, 0.85) 40%);
+}
+.input-container { max-width: 860px; margin: 0 auto; }
+.input-row {
+  display: flex; align-items: flex-end; gap: 10px;
+  padding: 10px 10px 10px 20px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 20px;
+  transition: all 0.2s;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+.input-row:focus-within {
+  border-color: rgba(168, 85, 247, 0.4);
+  box-shadow: 0 0 0 4px rgba(168, 85, 247, 0.1), 0 8px 32px rgba(0,0,0,0.3);
+}
+.chat-textarea {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: #e4e4e7;
+  font-size: 14.5px;
+  font-family: inherit;
+  line-height: 1.6;
+  resize: none;
+  padding: 6px 0;
+  min-height: 26px;
+  max-height: 180px;
+}
+.chat-textarea::placeholder { color: #52525b; }
+.chat-textarea:disabled { opacity: 0.5; }
+
+.send-btn {
+  width: 40px; height: 40px;
+  border-radius: 14px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.1);
+  color: #a1a1aa;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  flex-shrink: 0;
+}
+.send-btn:hover:not(:disabled) { transform: translateY(-1px); }
+.send-btn.active {
+  background: linear-gradient(135deg, #a855f7 0%, #3b82f6 100%);
+  border-color: transparent;
+  color: #fff;
+  box-shadow: 0 6px 18px rgba(168, 85, 247, 0.35);
+}
+.send-btn.active:hover:not(:disabled) {
+  box-shadow: 0 8px 24px rgba(168, 85, 247, 0.45);
+}
+.send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* 底部快速按钮 */
+.quick-row {
+  display: flex; gap: 8px; justify-content: center;
+  margin-top: 14px; flex-wrap: wrap;
+}
+.quick-chip {
+  padding: 7px 14px;
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 100px;
+  color: #a1a1aa;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: inherit;
+}
+.quick-chip:hover:not(:disabled) {
+  background: rgba(168, 85, 247, 0.1);
+  border-color: rgba(168, 85, 247, 0.3);
+  color: #c4b5fd;
+  transform: translateY(-1px);
+}
+.quick-chip:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* ============ 响应式 ============ */
 @media (max-width: 768px) {
-  .ai-toolbar {
-    flex-direction: column;
-    gap: 12px;
-    text-align: center;
-  }
-
-  .toolbar-left h1 {
-    font-size: 20px;
-  }
-
-  .feature-tabs {
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-  }
-
-  .tab-btn {
-    min-width: 100px;
-    padding: 10px 16px;
-  }
-
-  .tab-name {
-    font-size: 12px;
-  }
-
-  .chat-messages {
-    min-height: 300px;
-  }
-
-  .msg-content {
-    max-width: 90%;
-  }
-
-  .quick-actions {
-    justify-content: center;
-  }
-
-  .quick-btn {
-    flex: 1;
-    min-width: 45%;
-  }
-
-  .chat-input-area {
-    flex-direction: column;
-  }
-
-  .send-btn {
-    width: 100%;
-    justify-content: center;
-  }
-
-  .meta-info {
-    flex-direction: column;
-    gap: 8px;
-  }
-
-  .stats-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .graph-stats {
-    flex-direction: column;
-  }
-
-  .similar-books {
-    grid-template-columns: 1fr;
-  }
-}
-
-@media (max-width: 480px) {
-  .ai-assistant {
-    padding: 12px;
-  }
-
-  .panel-section {
-    padding: 16px;
-  }
-
-  .primary-btn {
-    width: 100%;
-    justify-content: center;
-  }
+  .ai-header { padding: 14px 16px; }
+  .welcome-wrap { padding: 4vh 16px 32px; }
+  .messages-wrap { padding: 24px 16px; }
+  .ai-footer { padding: 14px 16px 20px; }
+  .welcome-hero h1 { font-size: 24px; }
+  .brand-sub { display: none; }
+  .books-grid { grid-template-columns: 1fr; }
 }
 </style>

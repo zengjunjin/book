@@ -175,8 +175,8 @@ let pieChart = null
 let trendChart = null
 let dashboardChart = null
 
-const ORANGE = '#F97316'
-const ORANGE_LIGHT = '#fb923c'
+const ORANGE = '#6366f1'
+const ORANGE_LIGHT = '#818cf8'
 const BLUE = '#3b82f6'
 const GREEN = '#10b981'
 const PURPLE = '#8b5cf6'
@@ -527,7 +527,7 @@ onUnmounted(() => {
 }
 
 .stat-value {
-  color: #f97316;
+  color: #6366f1;
   font-size: 18px;
   font-weight: 700;
 }
@@ -572,7 +572,7 @@ onUnmounted(() => {
 }
 
 :deep(.el-card__header .el-icon) {
-  color: #f97316;
+  color: #6366f1;
 }
 
 :deep(.el-card__body) {
@@ -588,7 +588,7 @@ onUnmounted(() => {
 }
 
 :deep(.el-avatar) {
-  background-color: #f97316 !important;
+  background-color: #6366f1 !important;
   font-size: 32px;
   font-weight: 700;
 }

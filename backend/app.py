@@ -105,7 +105,11 @@ def create_app():
         # 预热失败不阻塞启动
         app.logger.warning(f'[PoolWarmup] 预热跳过: {e}')
 
-    CORS(app, origins=Config.CORS_ORIGINS)
+    # 开发模式：允许所有 origins；生产模式用白名单
+    if Config.CORS_ALLOW_ALL:
+        CORS(app, origins='*', supports_credentials=True)
+    else:
+        CORS(app, origins=Config.CORS_ORIGINS, supports_credentials=True)
 
     # ========== JWT 认证 ==========
     if _JWT_AVAILABLE:

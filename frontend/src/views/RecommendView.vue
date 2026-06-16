@@ -20,7 +20,7 @@
 
     <div v-if="userStore.isLoggedIn" class="status-card">
       <div class="status-item">
-        <el-icon :size="24" :color="'#f97316'"><DataAnalysis /></el-icon>
+        <el-icon :size="24" :color="'#6366f1'"><DataAnalysis /></el-icon>
         <div>
           <div class="status-label">您已评分</div>
           <div class="status-value">{{ userRatingCount }} 本</div>
@@ -308,7 +308,7 @@ onMounted(() => {
 
 .progress-bar {
   height: 100%;
-  background: linear-gradient(90deg, #f97316, #fb923c);
+  background: linear-gradient(90deg, #6366f1, #818cf8);
   border-radius: 2px;
   animation: progressLoading 1.5s ease-in-out infinite;
 }
@@ -331,7 +331,7 @@ onMounted(() => {
 .loading-dot {
   width: 8px;
   height: 8px;
-  background: #f97316;
+  background: linear-gradient(135deg, #6366f1, #4f46e5);
   border-radius: 50%;
   animation: dotBounce 1s ease-in-out infinite;
 }
@@ -342,7 +342,7 @@ onMounted(() => {
 }
 
 .recommend-tabs {
-  --el-color-primary: #f97316;
+  --el-color-primary: #6366f1;
 }
 
 /* 瀑布流布局 */
@@ -400,11 +400,11 @@ onMounted(() => {
 }
 
 :deep(.el-tabs__item.is-active) {
-  color: #f97316 !important;
+  color: #6366f1 !important;
 }
 
 :deep(.el-tabs__active-bar) {
-  background-color: #f97316 !important;
+  background-color: #6366f1 !important;
   transition: all 0.3s ease;
 }
 

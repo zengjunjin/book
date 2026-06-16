@@ -45,7 +45,7 @@
                   :model-value="Math.round(communityRating.avg_rating)"
                   disabled
                   show-score
-                  text-color="#F97316"
+                  text-color="#22d3ee"
                   :max="10"
                 />
               </div>
@@ -96,7 +96,7 @@
               v-model="userRatingVal"
               :max="10"
               show-score
-              text-color="#F97316"
+              text-color="#22d3ee"
               @change="handleRate"
             />
             <span class="rating-range">(1 - 10 分)</span>
@@ -132,7 +132,7 @@
   </div>
 
   <div v-else class="loading-area">
-    <el-progress type="dashboard" :percentage="75" :color="'#F97316'" :stroke-width="10" :text-inside="true" />
+    <el-progress type="dashboard" :percentage="75" :color="'#6366f1'" :stroke-width="10" :text-inside="true" />
     <p>加载中...</p>
   </div>
 </template>
@@ -154,6 +154,15 @@ const route = useRoute()
 const userStore = useUserStore()
 
 const book = ref(null)
+
+// 浏览器标签标题跟随书名
+const updateTitle = (b) => {
+  if (b && b.title) {
+    document.title = `${b.title} - BookRec`
+  } else {
+    document.title = '书籍详情 - BookRec'
+  }
+}
 const similarBooks = ref([])
 const userRatingVal = ref(0)
 const loading = ref(false)
@@ -180,6 +189,7 @@ const fetchBook = async () => {
     const params = userStore.isLoggedIn ? { user_id: userStore.user.id } : {}
     const bookRes = await bookAPI.getBook(route.params.id, params)
     book.value = bookRes.book
+    updateTitle(bookRes.book)
 
     // 提取社区评分
     if (book.value.community_rating) {
@@ -262,10 +272,11 @@ onMounted(() => {
   display: flex;
   gap: 40px;
   padding: 40px;
-  background: #18181f;
-  border: 1px solid #2a2a35;
-  border-radius: 12px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 16px;
   margin-bottom: 32px;
+  backdrop-filter: blur(20px);
 }
 
 .cover-area {
@@ -332,15 +343,15 @@ onMounted(() => {
 /* 社区评分卡片 */
 .community-card {
   padding: 24px;
-  background: linear-gradient(135deg, #1f2937 0%, #18181f 100%);
-  border: 1px solid #2a2a35;
-  border-radius: 10px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 12px;
   margin-bottom: 24px;
 }
 
 .community-card.empty {
   border-style: dashed;
-  background: #1f1f28;
+  background: rgba(255,255,255,0.02);
 }
 
 .community-header {
@@ -348,7 +359,7 @@ onMounted(() => {
 }
 
 .community-header h3 {
-  color: #f97316;
+  color: #6366f1;
   margin: 0 0 6px 0;
   font-size: 18px;
   font-weight: 600;
@@ -372,15 +383,16 @@ onMounted(() => {
 .avg-score {
   text-align: center;
   padding: 16px 20px;
-  background: #27272f;
-  border-radius: 8px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 12px;
   min-width: 180px;
 }
 
 .score-num {
   font-size: 48px;
   font-weight: 800;
-  color: #f97316;
+  color: #22d3ee;
   line-height: 1;
   margin-bottom: 8px;
 }
@@ -422,14 +434,14 @@ onMounted(() => {
 .dist-bar-wrap {
   flex: 1;
   height: 14px;
-  background: #27272f;
+  background: rgba(255,255,255,0.05);
   border-radius: 3px;
   overflow: hidden;
 }
 
 .dist-bar {
   height: 100%;
-  background: linear-gradient(90deg, #f97316 0%, #ea580c 100%);
+  background: linear-gradient(90deg, #6366f1 0%, #22d3ee 100%);
   min-width: 2px;
   transition: width 0.3s ease;
 }
@@ -444,7 +456,7 @@ onMounted(() => {
 .community-footer {
   margin-top: 18px;
   padding-top: 16px;
-  border-top: 1px solid #2a2a35;
+  border-top: 1px solid rgba(255,255,255,0.07);
   display: flex;
   align-items: center;
   gap: 8px;
@@ -453,16 +465,16 @@ onMounted(() => {
 }
 
 .community-footer b {
-  color: #f97316;
+  color: #6366f1;
   font-weight: 600;
 }
 
 /* 用户评分卡片 */
 .rating-section {
   padding: 24px;
-  background-color: #1f1f28;
-  border-radius: 10px;
-  border: 1px solid #2a2a35;
+  background-color: rgba(255,255,255,0.03);
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.07);
 }
 
 .rating-header {
@@ -470,7 +482,7 @@ onMounted(() => {
 }
 
 .rating-header h3 {
-  color: #f97316;
+  color: #6366f1;
   margin: 0 0 6px 0;
   font-size: 18px;
   font-weight: 600;
@@ -487,7 +499,7 @@ onMounted(() => {
 }
 
 .rating-header .hint.rated {
-  color: #f97316;
+  color: #22d3ee;
   font-weight: 500;
 }
 
@@ -506,7 +518,7 @@ onMounted(() => {
 .rating-compare {
   margin-top: 12px;
   padding-top: 12px;
-  border-top: 1px dashed #2a2a35;
+  border-top: 1px dashed rgba(255,255,255,0.07);
   display: flex;
   align-items: center;
   gap: 6px;
@@ -516,9 +528,9 @@ onMounted(() => {
 
 .similar-section {
   padding: 32px;
-  background: #18181f;
-  border: 1px solid #2a2a35;
-  border-radius: 12px;
+  background: rgba(255,255,255,0.02);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 16px;
 }
 
 .section-header {

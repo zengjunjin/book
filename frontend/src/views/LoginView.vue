@@ -180,7 +180,7 @@ const handleLogin = async () => {
 }
 
 .auth-link a {
-  color: #f97316;
+  color: #6366f1;
   text-decoration: none;
   font-weight: 500;
 }
@@ -203,12 +203,12 @@ const handleLogin = async () => {
 }
 
 .demo-hint .el-icon {
-  color: #f97316;
+  color: #6366f1;
   flex-shrink: 0;
   margin-top: 2px;
 }
 
 .demo-hint b {
-  color: #f97316;
+  color: #6366f1;
 }
 </style>

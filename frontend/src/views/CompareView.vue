@@ -157,8 +157,8 @@ let precisionChart = null
 let ctrChart = null
 let diversityChart = null
 
-const ORANGE = '#F97316'
-const ORANGE_LIGHT = '#fb923c'
+const ORANGE = '#6366f1'
+const ORANGE_LIGHT = '#818cf8'
 const BLUE = '#3b82f6'
 const GREEN = '#10b981'
 const PURPLE = '#8b5cf6'
@@ -617,7 +617,7 @@ onUnmounted(() => {
 }
 
 .metric-label {
-  color: #f97316;
+  color: #6366f1;
   font-size: 24px;
   font-weight: 700;
   margin-bottom: 4px;
@@ -646,7 +646,7 @@ onUnmounted(() => {
 }
 
 .metric-item.best {
-  border-color: #f97316;
+  border-color: #6366f1;
 }
 
 .metric-item.single {
@@ -660,7 +660,7 @@ onUnmounted(() => {
 }
 
 .metric-item .value {
-  color: #f97316;
+  color: #6366f1;
   font-size: 20px;
   font-weight: 700;
 }
@@ -702,7 +702,7 @@ onUnmounted(() => {
 }
 
 :deep(.el-card__header .el-icon) {
-  color: #f97316;
+  color: #6366f1;
 }
 
 :deep(.el-card__body) {
@@ -746,7 +746,7 @@ onUnmounted(() => {
 }
 
 .insights li strong {
-  color: #f97316;
+  color: #6366f1;
 }
 
 .loading-area {

@@ -19,10 +19,18 @@ class Config:
     
     CORS_ORIGINS = [
         'http://localhost:5173',
+        'http://localhost:5175',
         'http://127.0.0.1:5173',
+        'http://127.0.0.1:5175',
         'http://localhost:5000',
-        'http://127.0.0.1:5000'
+        'http://127.0.0.1:5000',
+        # Vite 开发服务器可能的其他端口
+        'http://localhost:5174',
+        'http://localhost:5176',
+        'http://localhost:5177',
     ]
+    # 开发模式默认开启全 origins（避免端口问题），生产设为 false
+    CORS_ALLOW_ALL = os.environ.get('CORS_ALLOW_ALL', 'true').lower() == 'true'
 
     # ========== Redis 缓存配置 ==========
     REDIS_HOST = os.environ.get('REDIS_HOST', 'localhost')
