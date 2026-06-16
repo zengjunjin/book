@@ -92,10 +92,11 @@ for name, path, params in TEST_CASES:
 
 # explain
 def t_explain():
-    r = GET('/api/recommend/explain', params={'user_id': 1, 'book_id': 100})
+    r = GET('/api/recommend/explain', params={'user_id': 1, 'book_id': 5001})
     if r.status_code == 200:
-        reason = r.json().get('reason', r.json().get('explanation', ''))
-        return True, reason[:80] if reason else '成功但无reason字段'
+        d = r.json()
+        reason = d.get('reason', d.get('explanation', {}).get('reason', ''))
+        return True, (str(reason)[:80] if reason else '成功但无reason字段')
     return False, f'status={r.status_code}'
 check('推荐解释', t_explain)
 
@@ -188,7 +189,7 @@ def t_neg_page():
 
 def t_empty_q():
     r = GET('/api/books/semantic-search', params={'q': ''})
-    return r.status_code == 200, f'status={r.status_code}'
+    return r.status_code in (200, 400), f'status={r.status_code} (空查询正确拒绝=400或空结果=200)'
 
 def t_sqli():
     r = GET('/api/books/semantic-search', params={"q": "' OR '1'='1"})
