@@ -69,3 +69,32 @@ node_modules/
 # System
 .DS_Store
 Thumbs.db
+
+# Temporary / helper scripts
+debug_*.py
+test_*.py
+check_*.py
+verify_*.py
+build_*.py
+backend/scripts/_*.py
+backend/fix_passwords.py
+backend/fix_all_passwords.py
+backend/cleanup_dupes.py
+backend/generate_demo_ratings.py
+backend/generate_sample_data.py
+backend/import_*.py
+backend/unzip_data.py
+backend/update_passwords.py
+backend/quick_import.py
+backend/test_final.py
+backend/ai/__api.py
+backend/scripts/recommend_service.py
+backend/scripts/download_model.py
+backend/scripts/build_faiss_index.py
+backend/scripts/check_env.py
+
+# book-v2 临时文件
+book-v2/pgsql/
+book-v2/pg.zip
+book-v2/_test_v2.py
+postgresql_installer.exe

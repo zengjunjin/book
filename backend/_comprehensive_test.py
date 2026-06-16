@@ -83,20 +83,26 @@ def test_rec(name, path, params):
     r = GET(f'/api/recommend{path}', params=params)
     if r.status_code == 200:
         d = r.json()
-        data = d.get('data', d.get('recommendations', d.get('results', [])))
+        data = d.get('data', d.get('recommendations', d.get('results', d.get('algorithms', []))))
         return True, f'返回 {len(data)} 条'
     return False, f'status={r.status_code}, body={r.text[:80]}'
 
 for name, path, params in TEST_CASES:
     check(name, lambda n=name, p=path, pm=params: test_rec(n, p, pm))
 
-# explain
+# explain: 先找一个真实存在的 book_id
 def t_explain():
-    r = GET('/api/recommend/explain', params={'user_id': 1, 'book_id': 5001})
+    # 先拿一本存在的书
+    r_books = GET('/api/books', params={'limit': 3})
+    book_id = 5001
+    if r_books.status_code == 200:
+        items = r_books.json().get('books', [])
+        if items:
+            book_id = items[0].get('id', 5001)
+    r = GET('/api/recommend/explain', params={'user_id': 1, 'book_id': book_id})
     if r.status_code == 200:
-        d = r.json()
-        reason = d.get('reason', d.get('explanation', {}).get('reason', ''))
-        return True, (str(reason)[:80] if reason else '成功但无reason字段')
+        reason = r.json().get('reason', r.json().get('explanation', {}).get('reason', ''))
+        return True, reason[:80] if reason else '成功但无reason字段'
     return False, f'status={r.status_code}'
 check('推荐解释', t_explain)
 
@@ -189,7 +195,7 @@ def t_neg_page():
 
 def t_empty_q():
     r = GET('/api/books/semantic-search', params={'q': ''})
-    return r.status_code in (200, 400), f'status={r.status_code} (空查询正确拒绝=400或空结果=200)'
+    return r.status_code in (200, 400), f'status={r.status_code} (400也正确)'
 
 def t_sqli():
     r = GET('/api/books/semantic-search', params={"q": "' OR '1'='1"})

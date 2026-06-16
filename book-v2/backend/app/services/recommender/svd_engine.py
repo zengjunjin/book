@@ -2,6 +2,7 @@ import random
 import numpy as np
 from surprise import SVD, Dataset, Reader
 from sqlalchemy import func
+from typing import List, Dict
 from app.database import SessionLocal
 from app.models import Rating, Book
 from app.services.recommender.base import BaseRecommender
