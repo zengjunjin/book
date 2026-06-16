@@ -1,0 +1,795 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>智能推荐中心 v2.0 | MMR · 内容过滤 · 对话推荐</title>
+  <style>
+    :root {
+      --primary: #6366f1;
+      --primary-dark: #4f46e5;
+      --accent: #ec4899;
+      --success: #10b981;
+      --warn: #f59e0b;
+      --bg: #0f172a;
+      --surface: #1e293b;
+      --surface-light: #334155;
+      --border: #475569;
+      --text: #f1f5f9;
+      --text-dim: #94a3b8;
+      --radius: 12px;
+      --shadow: 0 4px 24px rgba(0,0,0,0.25);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+        "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #312e81 100%);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 24px;
+    }
+    .container { max-width: 1400px; margin: 0 auto; }
+
+    /* Header */
+    .header {
+      background: linear-gradient(135deg, var(--primary), var(--accent));
+      padding: 32px;
+      border-radius: var(--radius);
+      margin-bottom: 24px;
+      box-shadow: var(--shadow);
+    }
+    .header h1 { font-size: 28px; margin-bottom: 8px; }
+    .header .subtitle { color: rgba(255,255,255,0.85); font-size: 14px; }
+    .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 20px; }
+    .stat-card {
+      background: rgba(255,255,255,0.15);
+      padding: 14px;
+      border-radius: 8px;
+      backdrop-filter: blur(10px);
+    }
+    .stat-card .label { font-size: 12px; color: rgba(255,255,255,0.7); }
+    .stat-card .value { font-size: 22px; font-weight: 600; margin-top: 4px; }
+
+    /* Panels */
+    .main-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 24px; }
+    @media (max-width: 900px) { .main-grid { grid-template-columns: 1fr; } }
+
+    .panel {
+      background: var(--surface);
+      border-radius: var(--radius);
+      padding: 24px;
+      box-shadow: var(--shadow);
+      margin-bottom: 24px;
+    }
+    .panel h2 { font-size: 18px; margin-bottom: 16px; color: var(--text); }
+
+    /* Algorithm selector */
+    .algo-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 20px; }
+    .algo-tab {
+      background: var(--surface-light);
+      color: var(--text);
+      border: 1px solid transparent;
+      padding: 8px 16px;
+      border-radius: 20px;
+      cursor: pointer;
+      font-size: 13px;
+      transition: all 0.2s;
+    }
+    .algo-tab:hover { border-color: var(--primary); }
+    .algo-tab.active {
+      background: var(--primary);
+      color: white;
+      border-color: var(--primary);
+    }
+    .algo-tab strong { display: block; font-size: 11px; opacity: 0.8; margin-top: 2px; }
+
+    /* Parameter controls */
+    .params {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+      margin-bottom: 20px;
+      padding: 16px;
+      background: var(--surface-light);
+      border-radius: 8px;
+    }
+    .param-group label {
+      display: block;
+      font-size: 12px;
+      color: var(--text-dim);
+      margin-bottom: 6px;
+    }
+    .param-group input[type="number"],
+    .param-group input[type="text"] {
+      width: 100%;
+      padding: 8px 12px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      font-size: 14px;
+    }
+    .param-group .slider-wrap {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .param-group input[type="range"] { flex: 1; }
+    .param-group .slider-val { font-weight: 600; color: var(--accent); min-width: 40px; text-align: right; }
+    .refresh-btn {
+      background: var(--primary);
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 6px;
+      font-size: 14px;
+      cursor: pointer;
+      font-weight: 500;
+      transition: background 0.2s;
+    }
+    .refresh-btn:hover { background: var(--primary-dark); }
+    .refresh-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    /* Loading */
+    .loading-bar {
+      height: 4px;
+      background: var(--surface-light);
+      border-radius: 2px;
+      overflow: hidden;
+      margin: 12px 0 20px;
+      display: none;
+    }
+    .loading-bar.active { display: block; }
+    .loading-bar::after {
+      content: '';
+      display: block;
+      height: 100%;
+      width: 30%;
+      background: linear-gradient(90deg, var(--primary), var(--accent));
+      animation: loading 1.5s ease-in-out infinite;
+    }
+    @keyframes loading { 0% { margin-left: -30%; } 100% { margin-left: 100%; } }
+
+    /* Book cards grid */
+    .books-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 16px;
+    }
+    .book-card {
+      background: var(--surface-light);
+      border-radius: 10px;
+      overflow: hidden;
+      transition: transform 0.2s, box-shadow 0.2s;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+    }
+    .book-card:hover { transform: translateY(-4px); box-shadow: 0 12px 32px rgba(99,102,241,0.3); }
+    .book-cover {
+      height: 160px;
+      background: linear-gradient(135deg, #6366f1, #8b5cf6);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-size: 13px;
+      text-align: center;
+      padding: 12px;
+      position: relative;
+    }
+    .book-cover img { width: 100%; height: 100%; object-fit: cover; }
+    .book-body { padding: 14px; flex: 1; display: flex; flex-direction: column; }
+    .book-title { font-size: 14px; font-weight: 600; margin-bottom: 4px; line-height: 1.4; }
+    .book-author { font-size: 12px; color: var(--text-dim); margin-bottom: 8px; }
+    .book-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      margin-bottom: 10px;
+    }
+    .book-tag {
+      font-size: 10px;
+      padding: 3px 8px;
+      border-radius: 10px;
+      background: rgba(99,102,241,0.2);
+      color: #a5b4fc;
+    }
+    .book-tag.mmr { background: rgba(236,72,153,0.2); color: #f9a8d4; }
+    .book-tag.strong { background: rgba(16,185,129,0.2); color: #6ee7b7; }
+    .book-rating {
+      font-size: 13px;
+      color: #fbbf24;
+      margin-top: auto;
+    }
+    .book-reason {
+      font-size: 11px;
+      color: var(--text-dim);
+      padding: 10px 14px;
+      background: rgba(15,23,42,0.4);
+      border-top: 1px solid var(--border);
+      line-height: 1.5;
+      font-style: italic;
+    }
+    .book-score {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      background: rgba(0,0,0,0.7);
+      padding: 4px 8px;
+      border-radius: 8px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 48px 24px;
+      color: var(--text-dim);
+    }
+    .empty-state .emoji { font-size: 48px; margin-bottom: 12px; }
+
+    /* Chat panel */
+    .chat-panel {
+      display: flex;
+      flex-direction: column;
+      height: 500px;
+    }
+    .chat-messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px;
+      background: var(--bg);
+      border-radius: 8px;
+      margin-bottom: 12px;
+    }
+    .message { margin-bottom: 12px; padding: 10px 14px; border-radius: 12px; max-width: 90%; font-size: 13px; line-height: 1.6; }
+    .message.user { background: var(--primary); color: white; margin-left: auto; border-bottom-right-radius: 4px; }
+    .message.ai { background: var(--surface-light); color: var(--text); border-bottom-left-radius: 4px; }
+    .message.recommend { background: var(--surface-light); border: 1px solid var(--primary); }
+    .message .rec-books { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; }
+    .message .rec-book { background: var(--bg); padding: 8px; border-radius: 6px; font-size: 12px; }
+    .message .rec-book .title { font-weight: 600; color: var(--accent); }
+    .message .rec-book .reason { color: var(--text-dim); font-size: 11px; margin-top: 2px; }
+
+    .chat-input {
+      display: flex;
+      gap: 8px;
+    }
+    .chat-input input {
+      flex: 1;
+      padding: 10px 14px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      font-size: 14px;
+    }
+    .chat-input button {
+      padding: 10px 20px;
+      background: var(--primary);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: 500;
+    }
+    .chat-input button:disabled { opacity: 0.5; }
+
+    .quick-prompts {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-bottom: 12px;
+    }
+    .quick-prompt {
+      font-size: 11px;
+      padding: 6px 10px;
+      background: var(--surface-light);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      cursor: pointer;
+      color: var(--text-dim);
+    }
+    .quick-prompt:hover { background: var(--primary); color: white; border-color: var(--primary); }
+
+    /* Status info */
+    .info-grid { display: grid; gap: 8px; }
+    .info-item {
+      display: flex;
+      justify-content: space-between;
+      padding: 8px 12px;
+      background: var(--surface-light);
+      border-radius: 6px;
+      font-size: 12px;
+    }
+    .info-item .label { color: var(--text-dim); }
+    .info-item .value { font-weight: 500; }
+    .status-ok { color: var(--success); }
+    .status-warn { color: var(--warn); }
+
+    /* Diversity panel */
+    .diversity-metrics {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .metric {
+      padding: 10px;
+      background: var(--bg);
+      border-radius: 6px;
+      text-align: center;
+    }
+    .metric .label { font-size: 10px; color: var(--text-dim); }
+    .metric .value { font-size: 18px; font-weight: 600; margin-top: 4px; color: var(--accent); }
+
+    /* Algorithms list */
+    .algo-list {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 12px;
+    }
+    .algo-card {
+      background: var(--bg);
+      padding: 14px;
+      border-radius: 8px;
+      border-left: 3px solid var(--primary);
+    }
+    .algo-card h3 { font-size: 14px; margin-bottom: 6px; }
+    .algo-card p { font-size: 12px; color: var(--text-dim); line-height: 1.5; margin-bottom: 8px; }
+    .algo-card .endpoint { font-size: 11px; font-family: monospace; color: var(--accent); }
+
+    .build-status {
+      padding: 12px;
+      background: var(--bg);
+      border-radius: 6px;
+      font-size: 12px;
+      margin-top: 8px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>🎯 智能推荐中心 v2.0</h1>
+      <div class="subtitle">MMR 多样性重排 · 内容过滤 · 协同过滤 · 语义召回 · 对话推荐</div>
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="label">推荐算法</div>
+          <div class="value" id="stat-algo-count">-</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">FAISS 索引</div>
+          <div class="value" id="stat-faiss-size">-</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">LLM 模型</div>
+          <div class="value" id="stat-llm">-</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">用户评分</div>
+          <div class="value" id="stat-ratings">-</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="main-grid">
+      <div>
+        <!-- Recommendation panel -->
+        <div class="panel">
+          <h2>✨ 个性化推荐</h2>
+          <div class="algo-tabs" id="algo-tabs"></div>
+
+          <div class="params">
+            <div class="param-group">
+              <label>用户 ID</label>
+              <input type="number" id="user-id" value="1" min="1" />
+            </div>
+            <div class="param-group">
+              <label>推荐数量</label>
+              <input type="number" id="rec-count" value="8" min="1" max="50" />
+            </div>
+            <div class="param-group" id="lambda-group" style="display:none;">
+              <label>多样性/相关性平衡 (lambda)</label>
+              <div class="slider-wrap">
+                <input type="range" id="lambda-param" min="0" max="1" step="0.1" value="0.5" />
+                <span class="slider-val" id="lambda-val">0.5</span>
+              </div>
+            </div>
+            <div class="param-group" style="display:flex;align-items:flex-end;">
+              <button class="refresh-btn" id="load-btn">🚀 获取推荐</button>
+            </div>
+          </div>
+
+          <div class="diversity-metrics" id="diversity-metrics" style="display:none;">
+            <div class="metric">
+              <div class="label">MMR 分数</div>
+              <div class="value" id="metric-mmr">-</div>
+            </div>
+            <div class="metric">
+              <div class="label">多样性得分</div>
+              <div class="value" id="metric-diversity">-</div>
+            </div>
+            <div class="metric">
+              <div class="label">候选池大小</div>
+              <div class="value" id="metric-pool">-</div>
+            </div>
+          </div>
+
+          <div class="loading-bar" id="loading"></div>
+
+          <div class="books-grid" id="books-grid"></div>
+        </div>
+
+        <!-- Algorithms list -->
+        <div class="panel">
+          <h2>📊 可用算法矩阵</h2>
+          <div class="algo-list" id="algo-list"></div>
+        </div>
+      </div>
+
+      <div>
+        <!-- Conversational recommend -->
+        <div class="panel">
+          <h2>💬 对话式推荐</h2>
+          <div class="chat-panel">
+            <div class="quick-prompts">
+              <span class="quick-prompt" data-prompt="给我推荐5本好书">给我推荐5本好书</span>
+              <span class="quick-prompt" data-prompt="我想看一些类似《百年孤独》的书">类似《百年孤独》</span>
+              <span class="quick-prompt" data-prompt="有什么关于AI的书？">AI 相关</span>
+              <span class="quick-prompt" data-prompt="推荐适合初学者的书">适合初学者</span>
+            </div>
+            <div class="chat-messages" id="chat-messages">
+              <div class="message ai">
+                你好！我是你的智能书籍推荐助手 📚<br><br>
+                你可以这样问我：<br>
+                • "给我推荐5本好书"<br>
+                • "我想看科幻小说"<br>
+                • "有什么关于AI的书？"<br><br>
+                我会结合 MMR 算法、内容过滤、协同过滤和语义搜索，为你推荐多样化且个性化的书籍！
+              </div>
+            </div>
+            <div class="chat-input">
+              <input type="text" id="chat-input" placeholder="输入你的问题..." />
+              <button id="chat-send">发送</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- System status -->
+        <div class="panel">
+          <h2>🖥️ 系统状态</h2>
+          <div class="info-grid" id="sys-status"></div>
+          <div id="embed-model-status"></div>
+          <div class="build-status" id="build-status">
+            <button class="refresh-btn" id="build-faiss" style="margin-top:8px; width:100%;">🛠️ 重建 FAISS 索引 (5000本)</button>
+            <div id="build-progress" style="display:none; margin-top:8px; font-size:11px; color:var(--text-dim);"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API = '/api';
+    const ALGORITHMS = [
+      { key: 'mmr', name: 'MMR 混合推荐', desc: '平衡相关性与多样性的主流方案', path: '/recommend/mmr', params: ['lambda_param'] },
+      { key: 'hybrid', name: 'Hybrid 混合推荐', desc: 'CF + SVD 多路融合', path: '/recommend/hybrid', params: [] },
+      { key: 'cf', name: '协同过滤 CF', desc: '基于用户行为相似度', path: '/recommend/cf', params: [] },
+      { key: 'svd', name: 'SVD 矩阵分解', desc: '隐因子模型，捕获潜在偏好', path: '/recommend/svd', params: [] },
+      { key: 'content', name: '内容过滤', desc: '基于书籍内容特征匹配', path: '/recommend/content', params: [] },
+      { key: 'item-based', name: 'Item-based CF', desc: '基于物品相似度推荐', path: '/recommend/item-based', params: [] },
+      { key: 'cold-start', name: '冷启动策略', desc: '新用户/数据不足时的 fallback', path: '/recommend/cold-start', params: [] },
+      { key: 'advanced', name: '高级 4 阶段', desc: '完整的 4 阶段推荐流水线', path: '/recommend/advanced', params: [] },
+    ];
+
+    let currentAlgo = 'mmr';
+
+    // ========== Rendering ==========
+    function renderTabs() {
+      const tabs = document.getElementById('algo-tabs');
+      tabs.innerHTML = '';
+      ALGORITHMS.forEach(algo => {
+        const el = document.createElement('button');
+        el.className = 'algo-tab' + (algo.key === currentAlgo ? ' active' : '');
+        el.innerHTML = `${algo.name}<strong>${algo.desc}</strong>`;
+        el.onclick = () => {
+          currentAlgo = algo.key;
+          renderTabs();
+          document.getElementById('lambda-group').style.display =
+            algo.key === 'mmr' ? 'block' : 'none';
+        };
+        tabs.appendChild(el);
+      });
+    }
+
+    function renderBooks(books, metadata = {}) {
+      const grid = document.getElementById('books-grid');
+      grid.innerHTML = '';
+
+      if (!books || books.length === 0) {
+        grid.innerHTML = `
+          <div class="empty-state" style="grid-column: 1 / -1;">
+            <div class="emoji">📭</div>
+            <p>${metadata.note || '暂无推荐，请先评分更多书籍'}</p>
+          </div>
+        `;
+        return;
+      }
+
+      books.forEach(book => {
+        const card = document.createElement('div');
+        card.className = 'book-card';
+        const cover = book.image_url ? `<img src="${book.image_url}" alt="${escapeHtml(book.title || '')}" onerror="this.style.display='none'" />` : escapeHtml(book.title || '未命名');
+        const score = book.mmr_score ?? book.blend_score ?? book.predicted_rating;
+        const scoreLabel = book.mmr_score != null ? 'MMR' : (book.blend_score != null ? '混合' : (book.predicted_rating != null ? '预测' : ''));
+
+        const tags = [];
+        if (book.mmr_score != null) tags.push(`<span class="book-tag mmr">MMR ${Number(book.mmr_score).toFixed(2)}</span>`);
+        if (book.content_score != null) tags.push(`<span class="book-tag">内容 ${Number(book.content_score).toFixed(2)}</span>`);
+        if (book.cf_score != null) tags.push(`<span class="book-tag">CF ${Number(book.cf_score).toFixed(2)}</span>`);
+        if (book.semantic_score != null) tags.push(`<span class="book-tag">语义 ${Number(book.semantic_score).toFixed(2)}</span>`);
+        if (book.predicted_rating != null) tags.push(`<span class="book-tag strong">⭐ ${Number(book.predicted_rating).toFixed(1)}</span>`);
+        if (book.tier) tags.push(`<span class="book-tag">${book.tier}</span>`);
+
+        const avg = book.avg_rating != null ? Number(book.avg_rating).toFixed(1) : '-';
+        const reason = book.reason || book.cold_start_reason || '基于您的阅读偏好';
+
+        card.innerHTML = `
+          <div class="book-cover">
+            ${cover}
+            ${score != null ? `<span class="book-score">${scoreLabel} ${Number(score).toFixed(2)}</span>` : ''}
+          </div>
+          <div class="book-body">
+            <div class="book-title">${escapeHtml(book.title || '未命名')}</div>
+            <div class="book-author">✍️ ${escapeHtml(book.author || '未知作者')}</div>
+            <div class="book-meta">${tags.join('') || '<span class="book-tag">推荐</span>'}</div>
+            <div class="book-rating">⭐ ${avg} / 10</div>
+          </div>
+          <div class="book-reason">💭 ${escapeHtml(reason)}</div>
+        `;
+        grid.appendChild(card);
+      });
+    }
+
+    function escapeHtml(s) {
+      if (s == null) return '';
+      return String(s).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+    }
+
+    // ========== API calls ==========
+    async function loadRecommendations() {
+      const userId = document.getElementById('user-id').value || 1;
+      const n = document.getElementById('rec-count').value || 8;
+      const lambdaParam = document.getElementById('lambda-param').value;
+
+      document.getElementById('loading').classList.add('active');
+      document.getElementById('diversity-metrics').style.display = 'none';
+
+      try {
+        const algo = ALGORITHMS.find(a => a.key === currentAlgo);
+        let url = `${API}${algo.path}?user_id=${userId}&n=${n}`;
+        if (algo.key === 'mmr') url += `&lambda_param=${lambdaParam}`;
+
+        const res = await fetch(url);
+        const data = await res.json();
+        const books = data.recommendations || data.books || [];
+
+        // Diversity metrics for MMR
+        if (algo.key === 'mmr' || data.diversity_score != null) {
+          document.getElementById('diversity-metrics').style.display = 'grid';
+          document.getElementById('metric-mmr').textContent = data.mmr_score != null ? Number(data.mmr_score).toFixed(3) : '-';
+          document.getElementById('metric-diversity').textContent = data.diversity_score != null ? Number(data.diversity_score).toFixed(2) : '-';
+          document.getElementById('metric-pool').textContent = data.candidate_pool_size || books.length;
+        }
+
+        renderBooks(books, data);
+      } catch (e) {
+        renderBooks([], { note: '请求失败: ' + e.message });
+      } finally {
+        document.getElementById('loading').classList.remove('active');
+      }
+    }
+
+    async function loadSystemStatus() {
+      // Recommend health
+      try {
+        const res = await fetch(`${API}/recommend/health`);
+        const data = await res.json();
+        document.getElementById('stat-algo-count').textContent = (data.routes_available || []).length;
+        document.getElementById('stat-ratings').textContent = data.cf_engine_users || 0;
+        renderStatus(data, '推荐服务');
+      } catch (e) { renderStatus({ error: e.message }, '推荐服务'); }
+
+      // AI + FAISS status
+      try {
+        const res = await fetch(`${API}/ai/status`);
+        const data = await res.json();
+        const faiss = data.faiss || {};
+        const llm = data.llm || {};
+        document.getElementById('stat-faiss-size').textContent =
+          faiss.faiss_ready ? faiss.faiss_index_size + ' 本' : '未构建';
+        document.getElementById('stat-llm').textContent = llm.current_model || '未启用';
+
+        // 显示 embedding 模型
+        const embedModel = faiss.embedding_model || faiss.ollama_model || '未知';
+        const embedDim = faiss.embedding_dimension || '';
+        const embedType = faiss.embedding_type || '';
+        const typeLabel = {
+          'ollama': '🦙 Ollama',
+          'sbert': '📦 Sentence-Transformers',
+          'tfidf': '🔤 TF-IDF',
+          'unknown': '❓'
+        }[embedType] || '🦙 Ollama';
+        document.getElementById('stat-llm').textContent =
+          embedType ? `${typeLabel} ${embedModel} (${embedDim}维)` : llm.current_model || '未启用';
+      } catch {}
+
+      // Ollama 模型可用性检测
+      try {
+        const res = await fetch(`${API}/books/embeddings/status`);
+        const data = await res.json();
+        const model = data.ollama_model || 'n/a';
+        const dim = data.ollama_dimension || 0;
+        const isReady = data.index_ready;
+        const idxSize = data.index_size || 0;
+        // 更新 embed-status 区域
+        const el = document.getElementById('embed-model-status');
+        if (el) {
+          el.innerHTML = `
+            <div class="info-item">
+              <span class="label">Embedding 模型</span>
+              <span class="value">${data.use_ollama ? '🦙 ' + model : (data.use_fallback ? '🔤 TF-IDF' : '❓ 未知')}</span>
+            </div>
+            <div class="info-item">
+              <span class="label">向量维度</span>
+              <span class="value">${data.effective_dimension || dim || 'N/A'}</span>
+            </div>
+            <div class="info-item">
+              <span class="label">FAISS 索引</span>
+              <span class="value ${isReady ? 'status-ok' : 'status-warn'}">
+                ${isReady ? `✅ ${idxSize} 本书` : '❌ 未构建'}
+              </span>
+            </div>
+          `;
+        }
+      } catch {}
+    }
+
+    function renderStatus(data, source) {
+      const el = document.getElementById('sys-status');
+      if (!el) return;
+      el.innerHTML = '';
+
+      const items = [];
+      if (data.routes_available) items.push(['算法数量', data.routes_available.length, 'ok']);
+      if (data.cf_engine_users != null) items.push(['CF 用户', data.cf_engine_users, data.cf_engine_users > 0 ? 'ok' : 'warn']);
+      if (data.ab_testing) items.push(['A/B 测试', '启用', 'ok']);
+      if (data.drift_detection) items.push(['兴趣漂移', '启用', 'ok']);
+      if (data.prewarm_done) items.push(['模型预热', '完成', 'ok']);
+
+      items.forEach(([label, value, state]) => {
+        const div = document.createElement('div');
+        div.className = 'info-item';
+        div.innerHTML = `<span class="label">${label}</span><span class="value status-${state}">${value}</span>`;
+        el.appendChild(div);
+      });
+    }
+
+    // ========== Chat ==========
+    function addChatMessage(text, sender = 'ai', recommendations = null) {
+      const messages = document.getElementById('chat-messages');
+      const msg = document.createElement('div');
+      msg.className = `message ${sender}` + (recommendations ? ' recommend' : '');
+      let html = text;
+      if (recommendations && recommendations.length) {
+        html += '<div class="rec-books">' + recommendations.slice(0, 5).map(b => `
+          <div class="rec-book">
+            <div class="title">📖 ${escapeHtml(b.title || '未命名')}</div>
+            <div class="reason">${escapeHtml(b.reason || '')}</div>
+          </div>
+        `).join('') + '</div>';
+      }
+      msg.innerHTML = html;
+      messages.appendChild(msg);
+      messages.scrollTop = messages.scrollHeight;
+    }
+
+    async function sendChatMessage() {
+      const input = document.getElementById('chat-input');
+      const message = input.value.trim();
+      if (!message) return;
+
+      addChatMessage(message, 'user');
+      input.value = '';
+
+      const sendBtn = document.getElementById('chat-send');
+      sendBtn.disabled = true;
+
+      const loadingMsg = document.createElement('div');
+      loadingMsg.className = 'message ai';
+      loadingMsg.innerHTML = '🤖 思考中...正在结合多路推荐算法为你寻找合适的书籍...';
+      document.getElementById('chat-messages').appendChild(loadingMsg);
+      document.getElementById('chat-messages').scrollTop = document.getElementById('chat-messages').scrollHeight;
+
+      try {
+        const res = await fetch(`${API}/ai/conversational-recommend`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            message,
+            user_id: Number(document.getElementById('user-id').value) || 1,
+            n_recommendations: 5
+          })
+        });
+        const data = await res.json();
+        loadingMsg.remove();
+        addChatMessage(data.reply || '抱歉，暂时无法生成推荐', 'ai', data.recommendations);
+      } catch (e) {
+        loadingMsg.remove();
+        addChatMessage('抱歉，出错了: ' + e.message, 'ai');
+      } finally {
+        sendBtn.disabled = false;
+      }
+    }
+
+    // ========== Build FAISS ==========
+    async function buildFaissIndex() {
+      const btn = document.getElementById('build-faiss');
+      const progress = document.getElementById('build-progress');
+      btn.disabled = true;
+      btn.textContent = '⏳ 构建中...';
+      progress.style.display = 'block';
+      progress.textContent = '正在构建（Ollama embedding，取决于网络速度）...';
+      try {
+        const res = await fetch(`${API}/books/embeddings/build?limit=5000`);
+        const data = await res.json();
+        progress.textContent = `状态: ${JSON.stringify(data, null, 2).substring(0, 200)}`;
+        // 3秒后刷新状态
+        setTimeout(() => {
+          loadSystemStatus();
+          btn.disabled = false;
+          btn.textContent = '🛠️ 重建 FAISS 索引 (5000本)';
+        }, 3000);
+      } catch (e) {
+        progress.textContent = '构建失败: ' + e.message;
+        btn.disabled = false;
+        btn.textContent = '🛠️ 重建 FAISS 索引 (5000本)';
+      }
+    }
+
+    // ========== Init ==========
+    function init() {
+      renderTabs();
+      document.getElementById('lambda-group').style.display = currentAlgo === 'mmr' ? 'block' : 'none';
+
+      document.getElementById('lambda-param').addEventListener('input', e => {
+        document.getElementById('lambda-val').textContent = e.target.value;
+      });
+
+      document.getElementById('load-btn').addEventListener('click', loadRecommendations);
+      document.getElementById('chat-send').addEventListener('click', sendChatMessage);
+      document.getElementById('chat-input').addEventListener('keydown', e => {
+        if (e.key === 'Enter') sendChatMessage();
+      });
+      document.querySelectorAll('.quick-prompt').forEach(el => {
+        el.addEventListener('click', () => {
+          document.getElementById('chat-input').value = el.dataset.prompt;
+          sendChatMessage();
+        });
+      });
+      document.getElementById('build-faiss').addEventListener('click', buildFaissIndex);
+
+      loadSystemStatus();
+      loadRecommendations();
+
+      // 定期刷新状态
+      setInterval(loadSystemStatus, 30000);
+    }
+
+    init();
+  </script>
+</body>
+</html>
