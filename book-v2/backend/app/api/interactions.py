@@ -51,13 +51,13 @@ def create_interaction(
     return {"success": True, "action": "added", "type": interaction_data.interaction_type}
 
 
-@router.get("/{user_id}")
+@router.get("/user")
 def get_user_interactions(
-    user_id: int,
     interaction_type: str = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
-    query = db.query(Interaction).filter(Interaction.user_id == user_id)
+    query = db.query(Interaction).filter(Interaction.user_id == current_user.id)
 
     if interaction_type:
         query = query.filter(Interaction.interaction_type == interaction_type)

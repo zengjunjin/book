@@ -17,7 +17,7 @@ def register(user_data: UserCreate, db: Session = Depends(get_db)):
     # Check if user exists
     if db.query(User).filter(User.username == user_data.username).first():
         raise HTTPException(status_code=400, detail="Username already registered")
-    if db.query(User).filter(User.email == user_data.email).first():
+    if user_data.email and db.query(User).filter(User.email == user_data.email).first():
         raise HTTPException(status_code=400, detail="Email already registered")
 
     # Create user
