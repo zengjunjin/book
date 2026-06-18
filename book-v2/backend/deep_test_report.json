@@ -1,0 +1,184 @@
+{
+  "test_time": "2026-06-17T20:13:14.790073",
+  "total_tests": 19,
+  "passed": 17,
+  "failed": 2,
+  "warnings": 10,
+  "pass_rate": 89.5,
+  "tests": [
+    {
+      "name": "健康检查",
+      "status": "PASS",
+      "message": "status=200, response={\"status\":\"ok\",\"version\":\"2.0.0\"}",
+      "timestamp": "2026-06-17T20:13:01.548971"
+    },
+    {
+      "name": "Swagger 文档",
+      "status": "PASS",
+      "message": "status=200",
+      "timestamp": "2026-06-17T20:13:01.550112"
+    },
+    {
+      "name": "书籍列表",
+      "status": "PASS",
+      "message": "total=271046, 返回 10 本",
+      "timestamp": "2026-06-17T20:13:01.682535"
+    },
+    {
+      "name": "书籍样本",
+      "status": "PASS",
+      "message": "id=103785, title=Golden Age of Myth &amp; Legend (Wordsworth Collec",
+      "timestamp": "2026-06-17T20:13:01.682535"
+    },
+    {
+      "name": "用户注册",
+      "status": "FAIL",
+      "message": "status=500, body=Internal Server Error",
+      "timestamp": "2026-06-17T20:13:01.998882"
+    },
+    {
+      "name": "用户登录",
+      "status": "FAIL",
+      "message": "status=401, body={\"detail\":\"Incorrect username or password\"}",
+      "timestamp": "2026-06-17T20:13:02.005275"
+    },
+    {
+      "name": "获取当前用户",
+      "status": "WARN",
+      "message": "跳过 - 登录失败无 token",
+      "timestamp": "2026-06-17T20:13:02.005275"
+    },
+    {
+      "name": "书籍详情",
+      "status": "WARN",
+      "message": "需要登录认证 - 稍后在认证测试后重试",
+      "timestamp": "2026-06-17T20:13:02.006781"
+    },
+    {
+      "name": "相似书籍端点",
+      "status": "WARN",
+      "message": "返回空列表 - 检查是否有同作者/同分类书籍",
+      "timestamp": "2026-06-17T20:13:02.116103"
+    },
+    {
+      "name": "搜索建议",
+      "status": "PASS",
+      "message": "6 条",
+      "timestamp": "2026-06-17T20:13:02.125102"
+    },
+    {
+      "name": "热门搜索",
+      "status": "PASS",
+      "message": "10 条",
+      "timestamp": "2026-06-17T20:13:02.126611"
+    },
+    {
+      "name": "书籍分类",
+      "status": "WARN",
+      "message": "分类为空 - 检查 Book 表的 category 字段是否有数据",
+      "timestamp": "2026-06-17T20:13:02.241878"
+    },
+    {
+      "name": "筛选选项",
+      "status": "PASS",
+      "message": "年份 1900-2050, 评分 1.0-10.0, 书籍总数=271046",
+      "timestamp": "2026-06-17T20:13:02.706342"
+    },
+    {
+      "name": "关键词搜索",
+      "status": "PASS",
+      "message": "搜索 'the' -> 5/105810 本",
+      "timestamp": "2026-06-17T20:13:02.894566"
+    },
+    {
+      "name": "查询用户评分",
+      "status": "PASS",
+      "message": "user_id=1, total=0, 当前返回 0 条",
+      "timestamp": "2026-06-17T20:13:02.898370"
+    },
+    {
+      "name": "⚠️ 评分数据",
+      "status": "WARN",
+      "message": "用户无评分记录 - 这是预期的新用户",
+      "timestamp": "2026-06-17T20:13:02.898370"
+    },
+    {
+      "name": "CF 协同过滤",
+      "status": "WARN",
+      "message": "无推荐结果 - 原因分析: (1)用户评分不足 (2)数据稀疏 (3)需要更高评分阈值",
+      "timestamp": "2026-06-17T20:13:02.902509"
+    },
+    {
+      "name": "SVD 矩阵分解",
+      "status": "PASS",
+      "message": "推荐 10 本, 包含评分预测=True",
+      "timestamp": "2026-06-17T20:13:03.444440"
+    },
+    {
+      "name": "算法对比",
+      "status": "PASS",
+      "message": "统计: 271046 书籍, 383685 评分, 68084 用户; 算法数=2",
+      "timestamp": "2026-06-17T20:13:03.892304"
+    },
+    {
+      "name": "推荐重叠分析",
+      "status": "WARN",
+      "message": "两种算法推荐完全不重叠 - 这是正常现象或需检查",
+      "timestamp": "2026-06-17T20:13:03.892304"
+    },
+    {
+      "name": "AI 引擎状态",
+      "status": "PASS",
+      "message": "Ollama=可用, lib_books=271046",
+      "timestamp": "2026-06-17T20:13:04.102459"
+    },
+    {
+      "name": "AI 搜索",
+      "status": "PASS",
+      "message": "搜索 'Harry Potter' -> 5 本",
+      "timestamp": "2026-06-17T20:13:04.120954"
+    },
+    {
+      "name": "AI 热门书籍",
+      "status": "PASS",
+      "message": "5 本热门高分书籍",
+      "timestamp": "2026-06-17T20:13:04.756725"
+    },
+    {
+      "name": "AI 对话",
+      "status": "PASS",
+      "message": "回复长度=818 字, 引用书籍=6 本",
+      "timestamp": "2026-06-17T20:13:14.778602"
+    },
+    {
+      "name": "用户列表",
+      "status": "WARN",
+      "message": "status=404 - 用户端点可能未实现",
+      "timestamp": "2026-06-17T20:13:14.780788"
+    },
+    {
+      "name": "交互列表",
+      "status": "WARN",
+      "message": "status=405 - 可能未实现",
+      "timestamp": "2026-06-17T20:13:14.782319"
+    },
+    {
+      "name": "404 处理",
+      "status": "WARN",
+      "message": "期望 404 但收到 401",
+      "timestamp": "2026-06-17T20:13:14.783541"
+    },
+    {
+      "name": "非法参数",
+      "status": "PASS",
+      "message": "status=422 (422=正常校验)",
+      "timestamp": "2026-06-17T20:13:14.787495"
+    },
+    {
+      "name": "未认证拦截",
+      "status": "PASS",
+      "message": "正确拒绝未认证请求 (status=401)",
+      "timestamp": "2026-06-17T20:13:14.790073"
+    }
+  ]
+}

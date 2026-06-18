@@ -140,12 +140,23 @@ class CFEngine(BaseRecommender):
 
                 book = db.query(Book).filter(Book.id == book_id).first()
                 if book:
+                    user_rating_record = db.query(Rating).filter(
+                        Rating.user_id == user_id,
+                        Rating.book_id == book.id
+                    ).first()
+                    book_avg_rating = db.query(func.avg(Rating.rating)).filter(
+                        Rating.book_id == book.id
+                    ).scalar()
                     results.append({
                         "book_id": book.id,
+                        "id": book.id,
                         "title": book.title,
                         "author": book.author,
                         "image_url": book.image_url,
                         "score": round(score, 2),
+                        "predicted_rating": round(score, 2),
+                        "user_rating": float(user_rating_record.rating) if user_rating_record else None,
+                        "avg_rating": float(book_avg_rating) if book_avg_rating else None,
                         "reason": "与你口味相似的用户喜欢",
                         "source": "cf"
                     })

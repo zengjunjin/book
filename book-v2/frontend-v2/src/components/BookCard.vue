@@ -126,6 +126,7 @@ const goToDetail = () => {
 const handleQuickRate = async (val) => {
   if (!userStore.isLoggedIn || submitting.value) return
   submitting.value = true
+  console.log('Rating request:', { book_id: props.book.id, rating: val, bookIdType: typeof props.book.id, ratingType: typeof val })
   try {
     await ratingAPI.createRating({
       book_id: props.book.id,
@@ -134,6 +135,7 @@ const handleQuickRate = async (val) => {
     ElMessage.success(`已评分 ${val} 分`)
     emit('rated', { book_id: props.book.id, rating: val })
   } catch (e) {
+    console.error('Rating error:', e)
     ElMessage.error('评分失败')
   } finally {
     submitting.value = false

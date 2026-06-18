@@ -1,62 +1,90 @@
 version: '3.8'
 
 services:
-  postgres:
-    image: postgres:15-alpine
-    environment:
-      POSTGRES_DB: book_recommend
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres123
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
+  # FastAPI 后端
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: book-recommend-backend
     ports:
-      - "5432:5432"
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - CELERY_BROKER_URL=redis://redis:6379/1
+      - CELERY_RESULT_BACKEND=redis://redis:6379/2
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    depends_on:
+      - redis
+      - postgres
+    volumes:
+      - ./backend:/app
+    networks:
+      - book-network
 
+  # Celery Worker
+  celery-worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: book-recommend-celery
+    command: celery -A app.celery_app worker --loglevel=info --pool=solo
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - CELERY_BROKER_URL=redis://redis:6379/1
+      - CELERY_RESULT_BACKEND=redis://redis:6379/2
+    depends_on:
+      - redis
+      - postgres
+    volumes:
+      - ./backend:/app
+    networks:
+      - book-network
+
+  # Redis 缓存
   redis:
     image: redis:7-alpine
+    container_name: book-recommend-redis
     ports:
       - "6379:6379"
     volumes:
-      - redis_data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
+      - redis-data:/data
+    networks:
+      - book-network
 
-  backend:
-    build: ./backend
+  # PostgreSQL 数据库
+  postgres:
+    image: postgres:16
+    container_name: book-recommend-postgres
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+      - POSTGRES_DB=${POSTGRES_DB:-book_recommend}
     ports:
-      - "8000:8000"
-    env_file:
-      - .env
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
+      - "5432:5432"
     volumes:
-      - ./backend:/app
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - book-network
 
-  celery_worker:
-    build: ./backend
-    env_file:
-      - .env
+  # 前端 (Vue3)
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: book-recommend-frontend
+    ports:
+      - "3000:80"
     depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    volumes:
-      - ./backend:/app
-    command: celery -A app.celery_app worker --loglevel=info
+      - backend
+    networks:
+      - book-network
 
 volumes:
-  postgres_data:
-  redis_data:
+  redis-data:
+  postgres-data:
+
+networks:
+  book-network:
+    driver: bridge

@@ -5,6 +5,11 @@
 - input_ids + attention_mask 输入格式
 - 离线模式支持
 """
+import os
+
+# 确保优先使用镜像
+os.environ['HF_ENDPOINT'] = os.environ.get('HF_ENDPOINT', 'https://hf-mirror.com')
+
 import torch
 import numpy as np
 from typing import List, Dict, Optional
@@ -41,8 +46,10 @@ class BookEmbeddingService:
             parts.append(f"出版社: {book.publisher}")
         if book.category:
             parts.append(f"类别: {book.category}")
+        # 如果没有描述，使用标题作为主要文本
         if book.description:
             parts.append(f"简介: {book.description}")
+        # 添加标签
         if book.tags:
             parts.append(f"标签: {', '.join(book.tags)}")
         return " | ".join(parts)
@@ -86,8 +93,7 @@ class BookEmbeddingService:
 
         # 获取候选书籍（排除自身）
         candidate_books = db.query(Book).filter(
-            Book.id != book_id,
-            Book.description.isnot(None)
+            Book.id != book_id
         ).limit(500).all()
 
         if not candidate_books:

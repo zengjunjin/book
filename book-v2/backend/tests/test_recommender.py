@@ -38,5 +38,5 @@ def test_preference_score_calculation():
         wanted=True
     )
 
-    expected = (8/10) * 0.5 + 0.5 + 0.3
+    expected = min(1, (8/10) * 0.5 + 0.5 + 0.3)
     assert abs(score - expected) < 0.01

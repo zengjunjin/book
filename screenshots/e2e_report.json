@@ -1,0 +1,260 @@
+{
+  "ok": true,
+  "successes": [
+    "[PASS] 首页加载",
+    "[PASS] 登录/注册完成（已离开登录页）",
+    "[PASS] 登录 token 写入 localStorage",
+    "[PASS] 推荐页有书籍卡片",
+    "[PASS] 评分组件有 10 颗星",
+    "[PASS] 评分 API 返回 2xx（实际 200）",
+    "[PASS] 评分 API 没有 422 错误",
+    "[PASS] 评分 API 没有 500 错误",
+    "[INFO] 未抓到 toast 提示文字",
+    "[PASS] 评分期间控制台无 422 错误",
+    "[PASS] 刷新后用户已评分 1 本",
+    "[PASS] 登录 token 在刷新后保留",
+    "[PASS] 后端确认评分记录 total>=1 (实际 1)",
+    "[PASS] 成功跳转到书籍详情页",
+    "[PASS] 侧边栏有「个人中心」菜单",
+    "[PASS] 成功跳转到个人中心"
+  ],
+  "failures": [],
+  "console_count": 5,
+  "api_responses": [
+    {
+      "method": "GET",
+      "url": "http://localhost:5173/src/api/index.ts",
+      "status": 200,
+      "post_data": null
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:5173/src/api/client.ts",
+      "status": 200,
+      "post_data": null
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:8001/api/books?page=1&per_page=20&sort=default",
+      "status": 307,
+      "post_data": null
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:8001/api/books?page=1&per_page=8&sort=popular",
+      "status": 307,
+      "post_data": null
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:8001/api/books/filters",
+      "status": 200,
+      "post_data": null
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:8001/api/books/hot-search?limit=10",
+      "status": 200,
+      "post_data": null
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:8001/api/books/?page=1&per_page=20&sort=default",
+      "status": 200,
+      "post_data": null
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:8001/api/books/?page=1&per_page=8&sort=popular",
+      "status": 200,
+      "post_data": null
+    },
+    {
+      "method": "POST",
+      "url": "http://localhost:8001/api/auth/login",
+      "status": 200,
+      "post_data": "username=e2e_user_1548579348&password=Test123456"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:8001/api/auth/me",
+      "status": 200,
+      "post_data": null
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:8001/api/books?page=1&per_page=20&sort=default",
+      "status": 307,
+      "post_data": null
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:8001/api/books?page=1&per_page=8&sort=popular",
+      "status": 307,
+      "post_data": null
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:8001/api/books/filters",
+      "status": 200,
+      "post_data": null
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:8001/api/books/hot-search?limit=10",
+      "status": 200,
+      "post_data": null
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:8001/api/books/search-history",
+      "status": 200,
+      "post_data": null
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:8001/api/books/?page=1&per_page=20&sort=default",
+      "status": 200,
+      "post_data": null
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:8001/api/books/?page=1&per_page=8&sort=popular",
+      "status": 200,
+      "post_data": null
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:8001/api/recommend/cf?n=20",
+      "status": 200,
+      "post_data": null
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:8001/api/recommend/svd?n=20",
+      "status": 200,
+      "post_data": null
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:8001/api/ratings/user?page=1&per_page=1",
+      "status": 200,
+      "post_data": null
+    },
+    {
+      "method": "POST",
+      "url": "http://localhost:8001/api/ratings/",
+      "status": 200,
+      "post_data": "{\"book_id\":86290,\"rating\":8}"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:5173/src/api/index.ts",
+      "status": 200,
+      "post_data": null
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:5173/src/api/client.ts",
+      "status": 200,
+      "post_data": null
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:8001/api/recommend/cf?n=20",
+      "status": 200,
+      "post_data": null
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:8001/api/recommend/svd?n=20",
+      "status": 200,
+      "post_data": null
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:8001/api/ratings/user?page=1&per_page=1",
+      "status": 200,
+      "post_data": null
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:5173/api/ratings/user?page=1&per_page=20",
+      "status": 200,
+      "post_data": null
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:8001/api/books/31702",
+      "status": 200,
+      "post_data": null
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:8001/api/books/31702/similar",
+      "status": 200,
+      "post_data": null
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:8001/api/books?page=1&per_page=20&sort=default",
+      "status": 307,
+      "post_data": null
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:8001/api/books?page=1&per_page=8&sort=popular",
+      "status": 307,
+      "post_data": null
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:8001/api/books/filters",
+      "status": 200,
+      "post_data": null
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:8001/api/books/hot-search?limit=10",
+      "status": 200,
+      "post_data": null
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:8001/api/books/search-history",
+      "status": 200,
+      "post_data": null
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:8001/api/books/?page=1&per_page=20&sort=default",
+      "status": 200,
+      "post_data": null
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:8001/api/books/?page=1&per_page=8&sort=popular",
+      "status": 200,
+      "post_data": null
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:8001/api/ratings/user?page=1&per_page=20",
+      "status": 200,
+      "post_data": null
+    }
+  ],
+  "page_errors": [],
+  "screenshots": [
+    "e2e_01_homepage.png",
+    "e2e_02_login.png",
+    "e2e_03_login_filled.png",
+    "e2e_05_after_login.png",
+    "e2e_06_recommend.png",
+    "e2e_07_after_rate_click.png",
+    "e2e_08_recommend_after_refresh.png",
+    "e2e_09_book_detail.png",
+    "e2e_10_back_to_home.png",
+    "e2e_11_profile.png"
+  ]
+}

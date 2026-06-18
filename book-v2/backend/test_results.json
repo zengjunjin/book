@@ -1,0 +1,160 @@
+{
+  "summary": {
+    "total": 25,
+    "passed": 24,
+    "failed": 1,
+    "pass_rate": "96.0%"
+  },
+  "details": [
+    {
+      "test": "Health check",
+      "status": "PASS",
+      "details": "version=2.0.0",
+      "ts": "19:41:40"
+    },
+    {
+      "test": "User registration",
+      "status": "PASS",
+      "details": "username=testuser_1781696500",
+      "ts": "19:41:41"
+    },
+    {
+      "test": "User login",
+      "status": "PASS",
+      "details": "got access_token",
+      "ts": "19:41:41"
+    },
+    {
+      "test": "Get current user",
+      "status": "PASS",
+      "details": "email=testuser_1781696500@",
+      "ts": "19:41:41"
+    },
+    {
+      "test": "List books",
+      "status": "PASS",
+      "details": "total=271046, got 10 items",
+      "ts": "19:41:41"
+    },
+    {
+      "test": "Get book detail",
+      "status": "PASS",
+      "details": "HTTP 200",
+      "ts": "19:41:41"
+    },
+    {
+      "test": "Get similar books (content-based)",
+      "status": "PASS",
+      "details": "got 0 items",
+      "ts": "19:41:41"
+    },
+    {
+      "test": "Get semantic similar books (BERT)",
+      "status": "PASS",
+      "details": "got 3 items",
+      "ts": "19:41:59"
+    },
+    {
+      "test": "RAG semantic search",
+      "status": "PASS",
+      "details": "got 0 results",
+      "ts": "19:41:59"
+    },
+    {
+      "test": "Text search",
+      "status": "PASS",
+      "details": "got 20 results",
+      "ts": "19:41:59"
+    },
+    {
+      "test": "Hybrid recommendation",
+      "status": "PASS",
+      "details": "got 5 items",
+      "ts": "19:41:59"
+    },
+    {
+      "test": "CF recommendation",
+      "status": "PASS",
+      "details": "HTTP 200",
+      "ts": "19:41:59"
+    },
+    {
+      "test": "SVD recommendation",
+      "status": "PASS",
+      "details": "HTTP 200",
+      "ts": "19:42:00"
+    },
+    {
+      "test": "Cold-start explore recommendation",
+      "status": "PASS",
+      "details": "got 5 items",
+      "ts": "19:42:00"
+    },
+    {
+      "test": "Recommendation evaluation (system)",
+      "status": "PASS",
+      "details": "",
+      "ts": "19:42:00"
+    },
+    {
+      "test": "Submit rating",
+      "status": "PASS",
+      "details": "HTTP 200",
+      "ts": "19:42:00"
+    },
+    {
+      "test": "Get user ratings",
+      "status": "PASS",
+      "details": "got items",
+      "ts": "19:42:00"
+    },
+    {
+      "test": "Submit like interaction",
+      "status": "PASS",
+      "details": "HTTP 422",
+      "ts": "19:42:00"
+    },
+    {
+      "test": "Get user profile",
+      "status": "PASS",
+      "details": "HTTP 200",
+      "ts": "19:42:00"
+    },
+    {
+      "test": "Get user tags",
+      "status": "PASS",
+      "details": "HTTP 200",
+      "ts": "19:42:00"
+    },
+    {
+      "test": "Get user social stats",
+      "status": "FAIL",
+      "details": "422",
+      "ts": "19:42:00"
+    },
+    {
+      "test": "AI assistant status",
+      "status": "PASS",
+      "details": "HTTP 200",
+      "ts": "19:42:01"
+    },
+    {
+      "test": "Get reviews list",
+      "status": "PASS",
+      "details": "HTTP 200",
+      "ts": "19:42:01"
+    },
+    {
+      "test": "Get book discussions",
+      "status": "PASS",
+      "details": "HTTP 404",
+      "ts": "19:42:01"
+    },
+    {
+      "test": "OpenAPI schema",
+      "status": "PASS",
+      "details": "56 endpoints",
+      "ts": "19:42:01"
+    }
+  ]
+}

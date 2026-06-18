@@ -129,3 +129,8 @@ class HybridRecommender(BaseRecommender):
             return recommendations[:n], 0, 0.0
         finally:
             db.close()
+
+    def recommend(self, user_id: int, n: int = 20) -> List[Dict]:
+        """Generate recommendations for a user"""
+        recs, _, _ = self.hybrid_recommend(user_id, n)
+        return recs

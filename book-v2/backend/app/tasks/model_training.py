@@ -85,3 +85,28 @@ def update_popular_books():
         return {"status": "success", "count": len(books)}
     finally:
         db.close()
+
+
+@celery_app.task
+def refresh_all_book_stats():
+    """Batch refresh all book statistics (for initialization)"""
+    db = SessionLocal()
+    try:
+        books = db.query(Book).all()
+        updated_count = 0
+
+        for book in books:
+            ratings = db.query(Rating).filter(Rating.book_id == book.id).all()
+            count = len(ratings)
+            avg = sum(r.rating for r in ratings) / count if count > 0 else 0
+
+            if book.rating_count != count or abs(book.avg_rating - avg) > 0.01:
+                book.rating_count = count
+                book.avg_rating = round(avg, 2)
+                updated_count += 1
+
+        db.commit()
+
+        return {"status": "success", "total_books": len(books), "updated_count": updated_count}
+    finally:
+        db.close()

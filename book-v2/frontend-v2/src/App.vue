@@ -48,5 +48,6 @@ const isAIPage = computed(() => {
   padding: 0;
   background-color: var(--bg-primary);
   min-height: 100vh;
+  margin-left: 220px;
 }
 </style>

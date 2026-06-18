@@ -45,12 +45,20 @@ class ColdStartHandler(BaseRecommender):
             results = []
             for book in books[:n]:
                 matching_tags = [t for t in (book.tags or []) if t in tag_names]
+                user_rating_record = db.query(Rating).filter(
+                    Rating.user_id == user_id,
+                    Rating.book_id == book.id
+                ).first()
                 results.append({
                     "book_id": book.id,
+                    "id": book.id,
                     "title": book.title,
                     "author": book.author,
                     "image_url": book.image_url,
                     "score": book.avg_rating,
+                    "predicted_rating": book.avg_rating,
+                    "user_rating": float(user_rating_record.rating) if user_rating_record else None,
+                    "avg_rating": book.avg_rating,
                     "reason": f"匹配你的兴趣: {', '.join(matching_tags[:2])}" if matching_tags else "热门推荐",
                     "source": "cold_start"
                 })
@@ -58,6 +66,10 @@ class ColdStartHandler(BaseRecommender):
             return results
         finally:
             db.close()
+
+    def recommend(self, user_id: int, n: int = 20) -> list:
+        """Generate cold start recommendations for a user"""
+        return self.get_tag_based_recommendations(user_id, n)
 
     def get_popular_recommendations(self, n: int = 20) -> list:
         """Get popular books as fallback"""
@@ -77,10 +89,14 @@ class ColdStartHandler(BaseRecommender):
                         b = book_map[bid_int]
                         results.append({
                             "book_id": b.id,
+                            "id": b.id,
                             "title": b.title,
                             "author": b.author,
                             "image_url": b.image_url,
                             "score": b.avg_rating,
+                            "predicted_rating": b.avg_rating,
+                            "user_rating": None,
+                            "avg_rating": b.avg_rating,
                             "reason": "热门推荐",
                             "source": "popular"
                         })
@@ -97,10 +113,14 @@ class ColdStartHandler(BaseRecommender):
             results = [
                 {
                     "book_id": book.id,
+                    "id": book.id,
                     "title": book.title,
                     "author": book.author,
                     "image_url": book.image_url,
                     "score": book.avg_rating,
+                    "predicted_rating": book.avg_rating,
+                    "user_rating": None,
+                    "avg_rating": book.avg_rating,
                     "reason": "热门推荐",
                     "source": "popular"
                 }

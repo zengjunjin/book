@@ -5,7 +5,7 @@ celery_app = Celery(
     "book_recommend",
     broker=settings.CELERY_BROKER_URL,
     backend=settings.CELERY_RESULT_BACKEND,
-    include=["app.tasks.model_training"]
+    include=["app.tasks.model_training", "app.tasks.feedback_driven_update"]
 )
 
 celery_app.conf.update(

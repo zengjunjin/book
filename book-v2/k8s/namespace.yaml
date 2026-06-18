@@ -1,0 +1,7 @@
+# K8s 部署命名空间
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: book-recommend
+  labels:
+    app: book-recommend

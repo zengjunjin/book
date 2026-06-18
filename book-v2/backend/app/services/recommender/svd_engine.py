@@ -1,5 +1,6 @@
 import random
 import numpy as np
+import pandas as pd
 from surprise import SVD, Dataset, Reader
 from sqlalchemy import func
 from typing import List, Dict
@@ -30,10 +31,9 @@ class SVDEngine(BaseRecommender):
 
             # Prepare data for surprise
             reader = Reader(rating_scale=(1, 10))
-            data = Dataset.load_from_df(
-                Dataset.parse_ratings([[r.user_id, r.book_id, r.rating] for r in ratings]),
-                reader
-            )
+            ratings_data = [(r.user_id, r.book_id, r.rating) for r in ratings]
+            df = pd.DataFrame(ratings_data, columns=['user_id', 'book_id', 'rating'])
+            data = Dataset.load_from_df(df, reader)
             trainset = data.build_full_trainset()
 
             # Train SVD
@@ -89,12 +89,23 @@ class SVDEngine(BaseRecommender):
             for book_id, score in top_predictions:
                 book = db.query(Book).filter(Book.id == book_id).first()
                 if book:
+                    user_rating_record = db.query(Rating).filter(
+                        Rating.user_id == user_id,
+                        Rating.book_id == book.id
+                    ).first()
+                    book_avg_rating = db.query(func.avg(Rating.rating)).filter(
+                        Rating.book_id == book.id
+                    ).scalar()
                     results.append({
                         "book_id": book.id,
+                        "id": book.id,
                         "title": book.title,
                         "author": book.author,
                         "image_url": book.image_url,
                         "score": round(score, 2),
+                        "predicted_rating": round(score, 2),
+                        "user_rating": float(user_rating_record.rating) if user_rating_record else None,
+                        "avg_rating": float(book_avg_rating) if book_avg_rating else None,
                         "reason": "基于你评分模式的预测",
                         "source": "svd"
                     })

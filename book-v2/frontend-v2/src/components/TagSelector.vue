@@ -56,12 +56,12 @@ watch(() => props.modelValue, (newVal) => {
 }
 
 .tag-selector h3 {
-  color: #e4e4e7;
+  color: var(--text-primary, #1e293b);
   margin-bottom: 8px;
 }
 
 .hint {
-  color: #71717a;
+  color: var(--text-secondary, #475569);
   font-size: 14px;
   margin-bottom: 20px;
 }
@@ -76,16 +76,16 @@ watch(() => props.modelValue, (newVal) => {
 .tag-cloud button {
   padding: 8px 16px;
   border-radius: 20px;
-  border: 1px solid #3f3f46;
+  border: 1px solid var(--border-color, #e2e8f0);
   background: #27272f;
-  color: #a1a1aa;
+  color: var(--text-muted, #94a3b8);
   cursor: pointer;
   transition: all 0.2s;
 }
 
 .tag-cloud button:hover {
   border-color: #f97316;
-  color: #e4e4e7;
+  color: var(--text-primary, #1e293b);
 }
 
 .tag-cloud button.selected {
@@ -95,7 +95,7 @@ watch(() => props.modelValue, (newVal) => {
 }
 
 .selected-info {
-  color: #71717a;
+  color: var(--text-secondary, #475569);
   font-size: 14px;
 }
 </style>

@@ -1,0 +1,55 @@
+# Celery Worker Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: celery-worker-deploy
+  namespace: book-recommend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: celery-worker
+  template:
+    metadata:
+      labels:
+        app: celery-worker
+    spec:
+      containers:
+        - name: celery-worker
+          image: book-recommend/backend:latest
+          command: ["python", "-m", "celery", "-A", "app.celery_app", "worker", "--loglevel=info", "--pool=solo", "-c", "4"]
+          envFrom:
+            - configMapRef:
+                name: book-recommend-config
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "500m"
+            limits:
+              memory: "4Gi"
+              cpu: "2000m"
+
+---
+# Celery Beat Deployment (for scheduled tasks)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: celery-beat-deploy
+  namespace: book-recommend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: celery-beat
+  template:
+    metadata:
+      labels:
+        app: celery-beat
+    spec:
+      containers:
+        - name: celery-beat
+          image: book-recommend/backend:latest
+          command: ["python", "-m", "celery", "-A", "app.celery_app", "beat", "--loglevel=info"]
+          envFrom:
+            - configMapRef:
+                name: book-recommend-config

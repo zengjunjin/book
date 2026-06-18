@@ -90,7 +90,7 @@ export const bookAPI = {
 export const ratingAPI = {
   // user_id 由后端从 JWT token 自动提取，前端无需传递
   createRating: (data: { book_id: number; rating: number }) => 
-    api.post('/ratings', data),
+    api.post('/ratings/', data),
   getUserRatings: (page = 1, per_page = 20) =>
     api.get('/ratings/user', { params: { page, per_page } })
 }

@@ -1,14 +1,32 @@
 from datetime import datetime, timedelta
 from jose import jwt
 from passlib.context import CryptContext
+from passlib.utils import handlers
 from sqlalchemy.orm import Session
 from app.config import settings
 from app.models import User
+
+# 尝试导入 scrypt，如果没有则使用 bcrypt
+try:
+    from passlib.hash import scrypt as scrypt_handler
+    _has_scrypt = True
+except ImportError:
+    _has_scrypt = False
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
+    """验证密码，支持 scrypt 和 bcrypt 格式"""
+    # 如果是 scrypt 格式，手动处理
+    if hashed_password.startswith("scrypt:"):
+        if not _has_scrypt:
+            return False
+        try:
+            return scrypt_handler.verify(plain_password, hashed_password)
+        except Exception:
+            return False
+    # 否则使用默认的 bcrypt
     return pwd_context.verify(plain_password, hashed_password)
 
 

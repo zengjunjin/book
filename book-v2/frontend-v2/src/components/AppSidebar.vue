@@ -79,6 +79,12 @@ const handleLogout = () => {
   border-right: 1px solid var(--border-color, #e2e8f0);
   display: flex;
   flex-direction: column;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 220px;
+  height: 100vh;
+  z-index: 100;
 }
 
 .logo {

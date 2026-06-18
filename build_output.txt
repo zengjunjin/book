@@ -1,0 +1,100 @@
+
+Microsoft (R) ³ÌÐòÎ¬»¤ÊµÓÃ¹¤¾ß 14.41.34123.0 °æ
+°æÈ¨ËùÓÐ (C) Microsoft Corporation¡£  ±£ÁôËùÓÐÈ¨Àû¡£
+
+	cl /nologo /I"F:\pgsql\pgsql\include\server\port\win32_msvc" /I"F:\pgsql\pgsql\include\server\port\win32" /I"F:\pgsql\pgsql\include\server" /I"F:\pgsql\pgsql\include"   /O2 /fp:fast /c src\bitutils.c /Fosrc\bitutils.obj
+bitutils.c
+	cl /nologo /I"F:\pgsql\pgsql\include\server\port\win32_msvc" /I"F:\pgsql\pgsql\include\server\port\win32" /I"F:\pgsql\pgsql\include\server" /I"F:\pgsql\pgsql\include"   /O2 /fp:fast /c src\bitvec.c /Fosrc\bitvec.obj
+bitvec.c
+	cl /nologo /I"F:\pgsql\pgsql\include\server\port\win32_msvc" /I"F:\pgsql\pgsql\include\server\port\win32" /I"F:\pgsql\pgsql\include\server" /I"F:\pgsql\pgsql\include"   /O2 /fp:fast /c src\halfutils.c /Fosrc\halfutils.obj
+halfutils.c
+	cl /nologo /I"F:\pgsql\pgsql\include\server\port\win32_msvc" /I"F:\pgsql\pgsql\include\server\port\win32" /I"F:\pgsql\pgsql\include\server" /I"F:\pgsql\pgsql\include"   /O2 /fp:fast /c src\halfvec.c /Fosrc\halfvec.obj
+halfvec.c
+	cl /nologo /I"F:\pgsql\pgsql\include\server\port\win32_msvc" /I"F:\pgsql\pgsql\include\server\port\win32" /I"F:\pgsql\pgsql\include\server" /I"F:\pgsql\pgsql\include"   /O2 /fp:fast /c src\hnsw.c /Fosrc\hnsw.obj
+hnsw.c
+	cl /nologo /I"F:\pgsql\pgsql\include\server\port\win32_msvc" /I"F:\pgsql\pgsql\include\server\port\win32" /I"F:\pgsql\pgsql\include\server" /I"F:\pgsql\pgsql\include"   /O2 /fp:fast /c src\hnswbuild.c /Fosrc\hnswbuild.obj
+hnswbuild.c
+	cl /nologo /I"F:\pgsql\pgsql\include\server\port\win32_msvc" /I"F:\pgsql\pgsql\include\server\port\win32" /I"F:\pgsql\pgsql\include\server" /I"F:\pgsql\pgsql\include"   /O2 /fp:fast /c src\hnswinsert.c /Fosrc\hnswinsert.obj
+hnswinsert.c
+	cl /nologo /I"F:\pgsql\pgsql\include\server\port\win32_msvc" /I"F:\pgsql\pgsql\include\server\port\win32" /I"F:\pgsql\pgsql\include\server" /I"F:\pgsql\pgsql\include"   /O2 /fp:fast /c src\hnswscan.c /Fosrc\hnswscan.obj
+hnswscan.c
+	cl /nologo /I"F:\pgsql\pgsql\include\server\port\win32_msvc" /I"F:\pgsql\pgsql\include\server\port\win32" /I"F:\pgsql\pgsql\include\server" /I"F:\pgsql\pgsql\include"   /O2 /fp:fast /c src\hnswutils.c /Fosrc\hnswutils.obj
+hnswutils.c
+	cl /nologo /I"F:\pgsql\pgsql\include\server\port\win32_msvc" /I"F:\pgsql\pgsql\include\server\port\win32" /I"F:\pgsql\pgsql\include\server" /I"F:\pgsql\pgsql\include"   /O2 /fp:fast /c src\hnswvacuum.c /Fosrc\hnswvacuum.obj
+hnswvacuum.c
+	cl /nologo /I"F:\pgsql\pgsql\include\server\port\win32_msvc" /I"F:\pgsql\pgsql\include\server\port\win32" /I"F:\pgsql\pgsql\include\server" /I"F:\pgsql\pgsql\include"   /O2 /fp:fast /c src\ivfbuild.c /Fosrc\ivfbuild.obj
+ivfbuild.c
+	cl /nologo /I"F:\pgsql\pgsql\include\server\port\win32_msvc" /I"F:\pgsql\pgsql\include\server\port\win32" /I"F:\pgsql\pgsql\include\server" /I"F:\pgsql\pgsql\include"   /O2 /fp:fast /c src\ivfflat.c /Fosrc\ivfflat.obj
+ivfflat.c
+	cl /nologo /I"F:\pgsql\pgsql\include\server\port\win32_msvc" /I"F:\pgsql\pgsql\include\server\port\win32" /I"F:\pgsql\pgsql\include\server" /I"F:\pgsql\pgsql\include"   /O2 /fp:fast /c src\ivfinsert.c /Fosrc\ivfinsert.obj
+ivfinsert.c
+	cl /nologo /I"F:\pgsql\pgsql\include\server\port\win32_msvc" /I"F:\pgsql\pgsql\include\server\port\win32" /I"F:\pgsql\pgsql\include\server" /I"F:\pgsql\pgsql\include"   /O2 /fp:fast /c src\ivfkmeans.c /Fosrc\ivfkmeans.obj
+ivfkmeans.c
+	cl /nologo /I"F:\pgsql\pgsql\include\server\port\win32_msvc" /I"F:\pgsql\pgsql\include\server\port\win32" /I"F:\pgsql\pgsql\include\server" /I"F:\pgsql\pgsql\include"   /O2 /fp:fast /c src\ivfscan.c /Fosrc\ivfscan.obj
+ivfscan.c
+	cl /nologo /I"F:\pgsql\pgsql\include\server\port\win32_msvc" /I"F:\pgsql\pgsql\include\server\port\win32" /I"F:\pgsql\pgsql\include\server" /I"F:\pgsql\pgsql\include"   /O2 /fp:fast /c src\ivfutils.c /Fosrc\ivfutils.obj
+ivfutils.c
+	cl /nologo /I"F:\pgsql\pgsql\include\server\port\win32_msvc" /I"F:\pgsql\pgsql\include\server\port\win32" /I"F:\pgsql\pgsql\include\server" /I"F:\pgsql\pgsql\include"   /O2 /fp:fast /c src\ivfvacuum.c /Fosrc\ivfvacuum.obj
+ivfvacuum.c
+	cl /nologo /I"F:\pgsql\pgsql\include\server\port\win32_msvc" /I"F:\pgsql\pgsql\include\server\port\win32" /I"F:\pgsql\pgsql\include\server" /I"F:\pgsql\pgsql\include"   /O2 /fp:fast /c src\sparsevec.c /Fosrc\sparsevec.obj
+sparsevec.c
+	cl /nologo /I"F:\pgsql\pgsql\include\server\port\win32_msvc" /I"F:\pgsql\pgsql\include\server\port\win32" /I"F:\pgsql\pgsql\include\server" /I"F:\pgsql\pgsql\include"   /O2 /fp:fast /c src\vector.c /Fosrc\vector.obj
+vector.c
+	cl /nologo /I"F:\pgsql\pgsql\include\server\port\win32_msvc" /I"F:\pgsql\pgsql\include\server\port\win32" /I"F:\pgsql\pgsql\include\server" /I"F:\pgsql\pgsql\include"   /O2 /fp:fast src\bitutils.obj src\bitvec.obj src\halfutils.obj src\halfvec.obj src\hnsw.obj src\hnswbuild.obj src\hnswinsert.obj src\hnswscan.obj src\hnswutils.obj src\hnswvacuum.obj src\ivfbuild.obj src\ivfflat.obj src\ivfinsert.obj src\ivfkmeans.obj src\ivfscan.obj src\ivfutils.obj src\ivfvacuum.obj src\sparsevec.obj src\vector.obj "F:\pgsql\pgsql\lib\postgres.lib" /link /DLL /OUT:vector.dll
+  æ­£åœ¨åˆ›å»ºåº“ vector.lib å’Œå¯¹è±¡ vector.exp
+	copy sql\vector.sql sql\vector--0.8.2.sql
+        1 file(s) copied.
+	copy vector.dll "F:\pgsql\pgsql\lib"
+        1 file(s) copied.
+	copy vector.control "F:\pgsql\pgsql\share\extension"
+        1 file(s) copied.
+	copy sql\vector--*.sql "F:\pgsql\pgsql\share\extension"
+sql\vector--0.1.0--0.1.1.sql
+sql\vector--0.1.1--0.1.3.sql
+sql\vector--0.1.3--0.1.4.sql
+sql\vector--0.1.4--0.1.5.sql
+sql\vector--0.1.5--0.1.6.sql
+sql\vector--0.1.6--0.1.7.sql
+sql\vector--0.1.7--0.1.8.sql
+sql\vector--0.1.8--0.2.0.sql
+sql\vector--0.2.0--0.2.1.sql
+sql\vector--0.2.1--0.2.2.sql
+sql\vector--0.2.2--0.2.3.sql
+sql\vector--0.2.3--0.2.4.sql
+sql\vector--0.2.4--0.2.5.sql
+sql\vector--0.2.5--0.2.6.sql
+sql\vector--0.2.6--0.2.7.sql
+sql\vector--0.2.7--0.3.0.sql
+sql\vector--0.3.0--0.3.1.sql
+sql\vector--0.3.1--0.3.2.sql
+sql\vector--0.3.2--0.4.0.sql
+sql\vector--0.4.0--0.4.1.sql
+sql\vector--0.4.1--0.4.2.sql
+sql\vector--0.4.2--0.4.3.sql
+sql\vector--0.4.3--0.4.4.sql
+sql\vector--0.4.4--0.5.0.sql
+sql\vector--0.5.0--0.5.1.sql
+sql\vector--0.5.1--0.6.0.sql
+sql\vector--0.6.0--0.6.1.sql
+sql\vector--0.6.1--0.6.2.sql
+sql\vector--0.6.2--0.7.0.sql
+sql\vector--0.7.0--0.7.1.sql
+sql\vector--0.7.1--0.7.2.sql
+sql\vector--0.7.2--0.7.3.sql
+sql\vector--0.7.3--0.7.4.sql
+sql\vector--0.7.4--0.8.0.sql
+sql\vector--0.8.0--0.8.1.sql
+sql\vector--0.8.1--0.8.2.sql
+sql\vector--0.8.2.sql
+       37 file(s) copied.
+	if not exist "F:\pgsql\pgsql\include\server\extension\vector" mkdir "F:\pgsql\pgsql\include\server\extension\vector"
+	for %f in (src\halfvec.h src\sparsevec.h src\vector.h) do copy %f "F:\pgsql\pgsql\include\server\extension\vector"
+
+C:\Users\15116\Downloads\pgvector-master\pgvector-master>copy src\halfvec.h "F:\pgsql\pgsql\include\server\extension\vector" 
+        1 file(s) copied.
+
+C:\Users\15116\Downloads\pgvector-master\pgvector-master>copy src\sparsevec.h "F:\pgsql\pgsql\include\server\extension\vector" 
+        1 file(s) copied.
+
+C:\Users\15116\Downloads\pgvector-master\pgvector-master>copy src\vector.h "F:\pgsql\pgsql\include\server\extension\vector" 
+        1 file(s) copied.

@@ -1,0 +1,153 @@
+{
+  "test_time": "2026-06-17T20:26:23.289261",
+  "total_tests": 29,
+  "passed": 29,
+  "failed": 0,
+  "tests": [
+    {
+      "name": "书籍列表浏览",
+      "status": "PASS",
+      "message": "status=200, total=271046"
+    },
+    {
+      "name": "获取书籍样本",
+      "status": "PASS",
+      "message": "book_id=277194, title=National Lampoon Presents True Facts: the Big Book"
+    },
+    {
+      "name": "相似书籍查询",
+      "status": "PASS",
+      "message": "status=200, similar=0"
+    },
+    {
+      "name": "搜索建议",
+      "status": "PASS",
+      "message": "status=200, 6 条"
+    },
+    {
+      "name": "热门搜索",
+      "status": "PASS",
+      "message": "status=200, 10 条"
+    },
+    {
+      "name": "分类浏览",
+      "status": "PASS",
+      "message": "status=200, 20 个"
+    },
+    {
+      "name": "筛选选项",
+      "status": "PASS",
+      "message": "status=200"
+    },
+    {
+      "name": "AI 热门推荐",
+      "status": "PASS",
+      "message": "status=200, 5 本"
+    },
+    {
+      "name": "AI 语义搜索",
+      "status": "PASS",
+      "message": "status=200, 3 本"
+    },
+    {
+      "name": "AI 引擎状态",
+      "status": "PASS",
+      "message": "status=200"
+    },
+    {
+      "name": "用户注册",
+      "status": "PASS",
+      "message": "status=200"
+    },
+    {
+      "name": "注册返回数据",
+      "status": "PASS",
+      "message": "user_id=278877, username=e2e_1781699183"
+    },
+    {
+      "name": "用户登录",
+      "status": "PASS",
+      "message": "status=200"
+    },
+    {
+      "name": "获取 access_token",
+      "status": "PASS",
+      "message": "token 长度: 125"
+    },
+    {
+      "name": "获取当前用户信息",
+      "status": "PASS",
+      "message": "status=200"
+    },
+    {
+      "name": "用户数据验证",
+      "status": "PASS",
+      "message": "username=e2e_1781699183, id=278877"
+    },
+    {
+      "name": "书籍详情",
+      "status": "PASS",
+      "message": "status=200"
+    },
+    {
+      "name": "书籍详情数据",
+      "status": "PASS",
+      "message": "title=National Lampoon Presents True Facts: the Big Book, community_rating=True"
+    },
+    {
+      "name": "创建评分",
+      "status": "PASS",
+      "message": "status=200"
+    },
+    {
+      "name": "查询用户评分",
+      "status": "PASS",
+      "message": "status=200, 1 条"
+    },
+    {
+      "name": "CF 协同过滤推荐",
+      "status": "PASS",
+      "message": "status=200, 10 本"
+    },
+    {
+      "name": "SVD 矩阵分解推荐",
+      "status": "PASS",
+      "message": "status=200, 10 本"
+    },
+    {
+      "name": "算法对比",
+      "status": "PASS",
+      "message": "status=200"
+    },
+    {
+      "name": "AI 对话",
+      "status": "PASS",
+      "message": "status=200"
+    },
+    {
+      "name": "AI 响应内容",
+      "status": "PASS",
+      "message": "回复长度: 786 字符"
+    },
+    {
+      "name": "不存在的书籍",
+      "status": "PASS",
+      "message": "status=404 (期望 401/404)"
+    },
+    {
+      "name": "未认证评分拦截",
+      "status": "PASS",
+      "message": "status=401 (期望 401/403)"
+    },
+    {
+      "name": "前端 dist 目录",
+      "status": "PASS",
+      "message": "存在: C:\\Users\\15116\\Desktop\\book\\book-v2\\backend\\..\\frontend-v2\\dist"
+    },
+    {
+      "name": "前端 index.html 完整性",
+      "status": "PASS",
+      "message": "包含样式引用=True, 包含脚本引用=True"
+    }
+  ]
+}

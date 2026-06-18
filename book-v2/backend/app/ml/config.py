@@ -7,7 +7,9 @@ import os
 # 离线模式配置
 os.environ['TRANSFORMERS_OFFLINE'] = os.getenv('TRANSFORMERS_OFFLINE', '0')
 os.environ['HF_HUB_OFFLINE'] = os.getenv('HF_HUB_OFFLINE', '0')
-os.environ['HF_ENDPOINT'] = os.getenv('HF_ENDPOINT', '')
+
+# 使用 HuggingFace 镜像加速下载（国内推荐）
+os.environ['HF_ENDPOINT'] = os.getenv('HF_ENDPOINT', 'https://hf-mirror.com')
 
 # 模型配置
 class MLConfig:

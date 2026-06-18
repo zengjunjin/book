@@ -5,15 +5,15 @@ from typing import Optional
 
 class RatingCreate(BaseModel):
     book_id: int
-    rating: int = Field(..., ge=1, le=10)
+    rating: float = Field(..., ge=1, le=10)
 
 
 class RatingResponse(BaseModel):
     id: int
     user_id: int
     book_id: int
-    rating: int
-    created_at: datetime
+    rating: float
+    created_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True

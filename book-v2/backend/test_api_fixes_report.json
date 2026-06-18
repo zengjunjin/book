@@ -1,0 +1,134 @@
+{
+  "test_time": "2026-06-17T20:21:48.058747",
+  "base_url": "http://localhost:8001",
+  "total_tests": 20,
+  "passed": 20,
+  "failed": 0,
+  "pass_rate": 100.0,
+  "tests": [
+    {
+      "name": "健康检查 /api/health",
+      "status": "PASS",
+      "message": "status=200",
+      "timestamp": "2026-06-17T20:21:43.538011",
+      "data": {
+        "status": "ok",
+        "version": "2.0.0"
+      }
+    },
+    {
+      "name": "/api/books (列表)",
+      "status": "PASS",
+      "message": "total=271046, books=5",
+      "timestamp": "2026-06-17T20:21:43.679140"
+    },
+    {
+      "name": "/api/books (sort 参数)",
+      "status": "PASS",
+      "message": "支持 sort=popularity 排序",
+      "timestamp": "2026-06-17T20:21:44.309279"
+    },
+    {
+      "name": "/api/books/count",
+      "status": "PASS",
+      "message": "count=271046",
+      "timestamp": "2026-06-17T20:21:44.532261"
+    },
+    {
+      "name": "/api/books/suggestions",
+      "status": "PASS",
+      "message": "找到 6 条建议",
+      "timestamp": "2026-06-17T20:21:44.542336"
+    },
+    {
+      "name": "/api/books/hot-search",
+      "status": "PASS",
+      "message": "热门搜索 5 条",
+      "timestamp": "2026-06-17T20:21:44.560366"
+    },
+    {
+      "name": "/api/books/search-history (GET)",
+      "status": "PASS",
+      "message": "获取搜索历史成功",
+      "timestamp": "2026-06-17T20:21:44.561874"
+    },
+    {
+      "name": "/api/books/search-history (POST)",
+      "status": "PASS",
+      "message": "添加搜索历史成功",
+      "timestamp": "2026-06-17T20:21:44.564078"
+    },
+    {
+      "name": "/api/books/search-history (DELETE)",
+      "status": "PASS",
+      "message": "清除搜索历史成功",
+      "timestamp": "2026-06-17T20:21:44.566592"
+    },
+    {
+      "name": "/api/books/categories",
+      "status": "PASS",
+      "message": "找到 20 个分类",
+      "timestamp": "2026-06-17T20:21:44.799340"
+    },
+    {
+      "name": "/api/books/filters",
+      "status": "PASS",
+      "message": "筛选选项 20 个分类, 271046 本书",
+      "timestamp": "2026-06-17T20:21:45.310310"
+    },
+    {
+      "name": "/api/ratings/user (query params)",
+      "status": "PASS",
+      "message": "用户评分 0 条",
+      "timestamp": "2026-06-17T20:21:45.333133"
+    },
+    {
+      "name": "/api/ratings/user/{user_id} (path params)",
+      "status": "PASS",
+      "message": "兼容旧路径格式",
+      "timestamp": "2026-06-17T20:21:45.337064"
+    },
+    {
+      "name": "/api/recommend/cf (query params)",
+      "status": "PASS",
+      "message": "CF 推荐 10 本",
+      "timestamp": "2026-06-17T20:21:45.742613"
+    },
+    {
+      "name": "/api/recommend/svd (query params)",
+      "status": "PASS",
+      "message": "SVD 推荐 10 本",
+      "timestamp": "2026-06-17T20:21:46.172586"
+    },
+    {
+      "name": "/api/recommend/compare",
+      "status": "PASS",
+      "message": "CF vs SVD 对比完成, 统计: {'total_books': 271046, 'total_ratings': 383687, 'total_users': 68086, 'avg_rating': 7.62660449793712, 'min_rating': 1.0, 'max_rating': 10.0}",
+      "timestamp": "2026-06-17T20:21:47.241312"
+    },
+    {
+      "name": "/api/recommend/cf/{user_id} (path params)",
+      "status": "PASS",
+      "message": "兼容旧路径格式",
+      "timestamp": "2026-06-17T20:21:47.256339"
+    },
+    {
+      "name": "/api/ai/status",
+      "status": "PASS",
+      "message": "AI 引擎状态正常",
+      "timestamp": "2026-06-17T20:21:47.567309"
+    },
+    {
+      "name": "/api/ai/search",
+      "status": "PASS",
+      "message": "AI 搜索 5 本书",
+      "timestamp": "2026-06-17T20:21:47.598768"
+    },
+    {
+      "name": "/api/ai/popular",
+      "status": "PASS",
+      "message": "热门书籍推荐正常",
+      "timestamp": "2026-06-17T20:21:48.058747"
+    }
+  ]
+}
